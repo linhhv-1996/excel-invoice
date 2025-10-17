@@ -1,0 +1,196 @@
+/* assets/css/main.css */
+:root {
+    --ink: #0f172a;
+    --slate: #64748b;
+    --slate-200: #e2e8f0;
+    --money: #16a34a;
+    --leaf: #22c55e;
+}
+
+/* Controls */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .5rem;
+    border-radius: 10px;
+    padding: .5rem .9rem;
+    font-weight: 700;
+    font-size: .9rem;
+    line-height: 1;
+    border: 1px solid var(--slate-200);
+    background: #fff;
+    color: var(--ink);
+    transition: box-shadow .2s, transform .02s, background .2s, border-color .2s
+}
+
+.btn:active {
+    transform: translateY(1px)
+}
+
+.btn:hover {
+    background: #f8fafc
+}
+
+.btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, .18)
+}
+
+.btn:disabled {
+    opacity: .5;
+    cursor: not-allowed;
+    transform: none;
+    background: #f8fafc
+}
+
+.btn-primary {
+    background: linear-gradient(180deg, #22c55e, #16a34a);
+    color: #fff;
+    border-color: var(--money)
+}
+
+.btn-dark {
+    background: #0f172a;
+    color: #fff;
+    border-color: #0f172a
+}
+
+.btn-outline {
+    background: #fff;
+    color: var(--ink);
+    border-color: var(--slate-200)
+}
+
+.btn-primary:hover {
+    background: linear-gradient(180deg, #16a34a, #15803d)
+}
+
+.btn-dark:hover {
+    background: #1e293b
+}
+
+.input,
+.select,
+.textarea {
+    width: 100%;
+    border: 1px solid var(--slate-200);
+    border-radius: 8px;
+    padding: .5rem .65rem;
+    font-size: .9rem;
+    background: #fff;
+    color: var(--ink);
+    transition: box-shadow .2s, border-color .2s
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+    outline: none;
+    border-color: var(--money);
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, .15)
+}
+
+.textarea {
+    resize: vertical
+}
+
+.file {
+    display: flex;
+    align-items: center;
+    gap: .5rem
+}
+
+.file input[type=file] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0
+}
+
+.file .file-name {
+    font-size: .85rem;
+    color: #475569
+}
+
+.chk {
+    appearance: none;
+    display: inline-grid;
+    place-content: center;
+    width: 18px;
+    height: 18px;
+    border: 1.5px solid var(--slate-200);
+    border-radius: 6px;
+    background: #fff;
+    transition: border-color .2s, background .2s, box-shadow .2s
+}
+
+.chk:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, .15)
+}
+
+.chk:checked {
+    border-color: var(--money);
+    background: var(--money)
+}
+
+.chk:checked::after {
+    content: "";
+    width: 10px;
+    height: 10px;
+    background: #fff;
+    border-radius: 2px
+}
+
+.card {
+    border: 1px solid var(--slate-200);
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, .04)
+}
+
+.sticky-col {
+    position: sticky;
+    top: 9.2rem;
+    /* align-self: start; */
+    max-height: calc(100vh - 10.5rem);
+    overflow-y: auto;
+    overflow-x: hidden
+}
+
+.modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, .55);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    z-index: 100
+}
+
+.modal.open {
+    display: flex
+}
+
+.page {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    width: 794px;
+    /* aspect-ratio: 794/1123; */
+}
+
+.td-desc {
+    word-break: break-word;
+}
+
+.table-fixed {
+    table-layout: fixed;
+}
