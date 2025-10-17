@@ -13,10 +13,9 @@ export function usePdfGenerator() {
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica)
     const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
 
-    const green = rgb(0.09, 0.64, 0.29)
+    const black = rgb(0, 0, 0)
     const grey = rgb(0.35, 0.35, 0.35)
     const lightGrey = rgb(0.9, 0.9, 0.9)
-    const black = rgb(0, 0, 0)
 
     const tw = width - m.left - m.right
     const cols = { desc: 0.60, qty: 0.10, unit: 0.15, total: 0.15 }
@@ -33,11 +32,13 @@ export function usePdfGenerator() {
     let y = height - m.top
 
     const draw = (text: string, x: number, y0: number, size = 10, f = font, color: any) => page.drawText(String(text ?? ''), { x, y: y0, size, font: f, color })
+    
     const right = (text: string, xRight: number, y0: number, size = 10, f = font, color: any) => {
       const t = String(text ?? '')
       const w = f.widthOfTextAtSize(t, size)
       page.drawText(t, { x: xRight - w, y: y0, size, font: f, color })
     }
+
     const wrap = (text: string, maxW: number, f = font, size = 10) => {
       const words = String(text || '').split(/\s+/)
       const lines: string[] = []
@@ -55,6 +56,7 @@ export function usePdfGenerator() {
       if (line) lines.push(line)
       return lines.length ? lines : ['']
     }
+
     const tableHeader = () => {
       page.drawRectangle({ x: m.left, y: y - 4, width: tw, height: 20, color: rgb(0.95, 0.95, 0.95) })
       draw('Description', x1 + pad, y, 10, bold, grey)
@@ -62,6 +64,7 @@ export function usePdfGenerator() {
       right('Unit Price', x3 + wUnit - pad, y, 10, bold, grey)
       right('Total', x4 + wTot - pad, y, 10, bold, grey)
     }
+
     const ensure = (need: number, includeHeader = false) => {
       const extra = includeHeader ? 40 : 0
       if (y - (need + extra) < m.bottom) {
@@ -73,7 +76,7 @@ export function usePdfGenerator() {
       }
     }
 
-    // Header and Meta info (không đổi)
+    // Header and Meta info
     draw('INVOICE', m.left, y, 18, bold, black)
     right(settings.cName || '', width - m.right, y, 11, bold, undefined)
     y -= 16
@@ -90,7 +93,7 @@ export function usePdfGenerator() {
     right('Invoice Number', xRight, metaY, 9, font, grey)
     right(invoice.invoiceNo || '', xRight, metaY - 14, 11, bold, undefined)
     right('Date of Issue', xRight, metaY - 32, 9, font, grey)
-    right(new Date().toLocaleDateString(), xRight, metaY - 46, 11, bold, undefined)
+    right(new Date().toLocaleString(), xRight, metaY - 46, 11, bold, undefined)
     const dateBaseline = metaY - 46
     const dateTextH = 12
     const metaBottom = dateBaseline - dateTextH
@@ -100,42 +103,54 @@ export function usePdfGenerator() {
 
     // Table header
     tableHeader()
-    y -= 25
 
+    // Table rows - **FIXED SECTION**
     let sum = 0
     for (const l of invoice.lines) {
+      // 1. Tính toán trước chiều cao cần thiết cho cả dòng này
       const descLines = wrap(l.desc, wDesc - pad * 2, font, 10)
-      // Thêm padding vào tính toán chiều cao row
-      const rowH = Math.max(descLines.length * lh, 14) + 6
-      ensure(rowH, true)
+      const paddingTop = 8
+      const paddingBottom = 8
+      // Chiều cao của dòng được quyết định bởi chiều cao của đoạn text mô tả
+      const rowHeight = descLines.length * lh + paddingTop + paddingBottom
+      
+      // 2. Kiểm tra xem có cần sang trang mới không
+      ensure(rowHeight, true)
 
-      // Vẽ text (căn lề trên cùng của row)
+      // 3. Ghi lại vị trí bắt đầu (phía trên) của dòng
       const topOfRow = y
-      let ry = topOfRow
+
+      // 4. Vẽ nội dung
+      const contentY = topOfRow - paddingTop - (lh - 2) // Y cho dòng text đầu tiên
+
+      // Vẽ các cột có text 1 dòng
+      right(String(l.qty), x2 + wQty - pad, contentY, 10, font, undefined)
+      right(moneyStr(l.unit, settings.currency), x3 + wUnit - pad, contentY, 10, font, undefined)
+      right(moneyStr(l.total, settings.currency), x4 + wTot - pad, contentY, 10, bold, undefined)
+
+      // Vẽ cột mô tả (có thể có nhiều dòng)
+      let currentDescY = contentY
       for (const dl of descLines) {
-        draw(dl, x1 + pad, ry, 10, font, undefined)
-        ry -= lh
+        draw(dl, x1 + pad, currentDescY, 10, font, undefined)
+        currentDescY -= lh // Di chuyển xuống cho dòng mô tả tiếp theo
       }
-      right(String(l.qty), x2 + wQty - pad, topOfRow, 10, font, undefined)
-      right(moneyStr(l.unit, settings.currency), x3 + wUnit - pad, topOfRow, 10, font, undefined)
-      right(moneyStr(l.total, settings.currency), x4 + wTot - pad, topOfRow, 10, bold, undefined)
 
-      // Cập nhật tổng tiền
-      sum += (l.total || 0)
+      // 5. Cập nhật y xuống dưới cùng của dòng vừa vẽ
+      y = topOfRow - rowHeight
 
-      // **FIX:** Di chuyển con trỏ y xuống dưới cùng của row vừa vẽ
-      y -= rowH
-
-      // **FIX:** Vẽ đường kẻ ở vị trí y hiện tại (đáy của row)
+      // 6. Vẽ đường kẻ phân cách ở vị trí y mới
+      // Giờ đây đường kẻ sẽ luôn ở đúng đáy của mỗi dòng
       page.drawLine({
         start: { x: m.left, y },
         end: { x: width - m.right, y },
         thickness: 0.5,
         color: lightGrey,
       })
+      
+      sum += (l.total || 0)
     }
 
-    // Grand Total (không đổi)
+    // Grand Total
     y -= 20
     ensure(28)
     right('Grand Total', x4 - pad, y, 12, bold, black)
