@@ -1,10 +1,11 @@
-// composables/useInvoiceGenerator.ts
-import { ref, reactive, computed, onMounted } from 'vue'
+// app/composables/useInvoiceGenerator.ts
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import * as XLSX from 'xlsx'
 import JSZip from 'jszip'
 import { saveAs } from 'file-saver'
 import { useNotification } from './useNotification'
 import { usePdfGenerator } from './usePdfGenerator'
+import { useExcelData } from './useSharedState'
 
 // --- Types (Export để các file khác có thể dùng) ---
 export interface InvoiceLine {
@@ -29,38 +30,54 @@ export interface Mapping {
   unit: string
   groupBy: string
 }
+// **** UPDATED ****
 export interface Settings {
   cName: string
+  cEmail: string
   cAddr: string
-  cTax: string
+  logo: string | null
+  template: 'modern' | 'classic' | 'technical' | 'elegant' // Added new templates
+  fileNamePattern: string
+  startInvoiceNumber: string
   currency: 'USD' | 'EUR' | 'VND'
-  template: 'modern' | 'classic'
+  locale: 'en-US' | 'en-GB' | 'vi-VN'
+  taxPercent: number
   freeMode: boolean
 }
 
+
 const LS_KEYS = {
-  SETTINGS: 'EIP_settings_v1',
+  SETTINGS: 'EIP_settings_v2',
   MAPPING: 'EIP_mapping_v2',
 }
 
 export function useInvoiceGenerator() {
   const { showNotification } = useNotification()
   const { renderPdf } = usePdfGenerator()
+  const { rawRows, fileName } = useExcelData()
 
-  const fileInput = ref<HTMLInputElement | null>(null)
   const isProcessing = ref(false)
   const progress = ref({ value: 0, text: '' })
 
-  const isFileUploaded = ref(false)
-
   const state = reactive({
-    rawRows: [] as any[],
-    fileName: 'No file selected',
+    rawRows: rawRows,
+    fileName: fileName,
     mapping: {
       customer: '', email: '', invoiceNo: '', desc: '', qty: '', unit: '', groupBy: '',
     } as Mapping,
+    // **** UPDATED: Default template changed to 'modern' ****
     settings: {
-      cName: '', cAddr: '', cTax: '', currency: 'USD' as 'USD' | 'EUR' | 'VND', template: 'modern' as 'modern' | 'classic', freeMode: true,
+      cName: 'Your Company',
+      cEmail: 'you@example.com',
+      cAddr: '123 Your Street, City',
+      logo: null,
+      template: 'modern', // Default template
+      fileNamePattern: 'invoice_{client}_{date}',
+      startInvoiceNumber: 'INV-001',
+      currency: 'USD',
+      locale: 'en-US',
+      taxPercent: 10,
+      freeMode: true,
     } as Settings,
   })
 
@@ -68,7 +85,7 @@ export function useInvoiceGenerator() {
   const invoices = ref<Invoice[]>([])
   const firstInvoice = computed(() => invoices.value[0] || null)
 
-  // --- Local Storage ---
+  // --- Local Storage cho Settings & Mapping ---
   const saveSettings = (showToast = true) => {
     localStorage.setItem(LS_KEYS.SETTINGS, JSON.stringify(state.settings))
     if (showToast)
@@ -77,13 +94,10 @@ export function useInvoiceGenerator() {
 
   const loadSettings = () => {
     try {
-      const s = JSON.parse(localStorage.getItem(LS_KEYS.SETTINGS) || '{}')
-      if (s.cName) state.settings.cName = s.cName
-      if (s.cAddr) state.settings.cAddr = s.cAddr
-      if (s.cTax) state.settings.cTax = s.cTax
-      if (s.currency) state.settings.currency = s.currency
-      if (s.template) state.settings.template = s.template
-      if (typeof s.freeMode === 'boolean') state.settings.freeMode = s.freeMode
+      const saved = localStorage.getItem(LS_KEYS.SETTINGS)
+      if (saved) {
+         Object.assign(state.settings, JSON.parse(saved))
+      }
     }
     catch { /* ignore */ }
   }
@@ -101,60 +115,9 @@ export function useInvoiceGenerator() {
     }
   }
 
-  // --- Core Logic ---
-  const handleFileChange = async (e: Event) => {
-    const file = (e.target as HTMLInputElement).files?.[0]
-    if (!file)
-      return
-
-    state.fileName = file.name
-    try {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        try {
-          const data = new Uint8Array(e.target!.result as ArrayBuffer)
-          const wb = XLSX.read(data, { type: 'array' })
-          const ws = wb.Sheets[wb.SheetNames[0]]
-          state.rawRows = XLSX.utils.sheet_to_json(ws, { defval: '' })
-          if (!state.rawRows.length) {
-            showNotification('No data detected in the first sheet.')
-            isFileUploaded.value = false
-            return
-          }
-
-          isFileUploaded.value = true
-          autoGuessMappings()
-          applySavedMapping()
-
-          // Generate preview in next tick
-          setTimeout(() => {
-            generateAndPreview()
-            if (validateMapping())
-              showNotification('File loaded and preview generated!')
-            else
-              showNotification('File loaded. Please map required columns (*).')
-          }, 0)
-        }
-        catch (err: any) {
-          showNotification(`Excel error: ${err.message}`)
-          isFileUploaded.value = false;
-        }
-      }
-    reader.onerror = () => { 
-        showNotification('Could not read file.');
-        isFileUploaded.value = false;
-    }
-
-    reader.readAsArrayBuffer(file)
-    }
-
-    catch (err: any) {
-      showNotification('No valid invoice data found based on your mapping.')
-    }
-  }
-
+  // --- Logic xử lý chính ---
   const validateMapping = () => {
-    return [state.mapping.customer, state.mapping.desc, state.mapping.qty, state.mapping.unit].every(s => !!s)
+     return [state.mapping.customer, state.mapping.desc, state.mapping.qty, state.mapping.unit].every(s => !!s)
   }
 
   const groupInvoices = (rows: any[], mapping: Mapping): Invoice[] => {
@@ -163,8 +126,8 @@ export function useInvoiceGenerator() {
       const customer = String(r[mapping.customer] ?? '').trim()
       if (!customer)
         continue
-      const grpVal = mapping.groupBy ? String(r[mapping.groupBy] ?? '').trim() : ''
-      const key = mapping.groupBy ? `${customer}__SEP__${grpVal}` : customer
+      const grpVal = mapping.groupBy && mapping.groupBy !== '-- No Grouping --' ? String(r[mapping.groupBy] ?? '').trim() : ''
+      const key = grpVal ? `${customer}__SEP__${grpVal}` : customer
       if (!groups.has(key))
         groups.set(key, { customer, email: r[mapping.email] || '', groupBy: grpVal, invoiceNo: '', lines: [] })
 
@@ -178,8 +141,9 @@ export function useInvoiceGenerator() {
 
     let i = 1
     for (const g of groups.values()) {
-      if (!g.invoiceNo)
+      if (!g.invoiceNo) {
         g.invoiceNo = `INV-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(i).padStart(3, '0')}`
+      }
       i++
     }
     return Array.from(groups.values())
@@ -191,34 +155,30 @@ export function useInvoiceGenerator() {
       return
     }
     invoices.value = groupInvoices(state.rawRows, state.mapping)
-
-    if (!invoices.value.length)
-      toast.warning('No valid invoice data found based on your mapping.')
   }
 
   const autoGuessMappings = () => {
     const h = headers.value
     const guess = (needle: string) => h.find(h => h.toLowerCase().includes(needle)) || ''
-    state.mapping.customer = guess('name') || guess('customer') || ''
+    state.mapping.customer = guess('name') || guess('customer') || guess('client') || ''
     state.mapping.email = guess('email') || ''
     state.mapping.invoiceNo = guess('invoice') || guess('inv') || ''
     state.mapping.desc = guess('desc') || guess('item') || guess('service') || ''
     state.mapping.qty = guess('qty') || guess('quantity') || ''
     state.mapping.unit = guess('price') || guess('unit') || guess('rate') || ''
-    state.mapping.groupBy = ''
+    state.mapping.groupBy = h.includes('client_name') ? 'client_name' : (h.includes('project_id') ? 'project_id' : '')
   }
 
-  const applySavedMapping = () => {
+   const applySavedMapping = () => {
     const m = loadMapping()
-    if (!m)
-      return
+    if (!m) return
     const setIfExists = (key: keyof Mapping) => {
       const savedValue = m[key]
-      if (savedValue && headers.value.includes(savedValue))
+      if (savedValue && headers.value.includes(savedValue)) {
         state.mapping[key] = savedValue
+      }
     }
-    setIfExists('customer'); setIfExists('email'); setIfExists('invoiceNo')
-    setIfExists('desc'); setIfExists('qty'); setIfExists('unit'); setIfExists('groupBy')
+    Object.keys(state.mapping).forEach(key => setIfExists(key as keyof Mapping))
   }
 
   const sanitizeFile = (s: string) => {
@@ -256,52 +216,20 @@ export function useInvoiceGenerator() {
     }
   }
 
-  const resetApp = () => {
-    if (confirm('Clear all saved settings & mappings? This will reload the page.')) {
-      localStorage.removeItem(LS_KEYS.SETTINGS)
-      localStorage.removeItem(LS_KEYS.MAPPING)
-      location.reload();
-      isFileUploaded.value = false
-    }
-  }
-
-  const downloadTemplate = () => {
-    const sampleData = [
-      { customer_name: 'Client A', customer_email: 'client.a@email.com', invoice_no: 'INV-001', item_description: 'Web Design Service', quantity: 1, unit_price: 1500 },
-      { customer_name: 'Client B', customer_email: 'client.b@email.com', invoice_no: 'INV-002', item_description: 'Logo Design', quantity: 1, unit_price: 500 },
-      { customer_name: 'Client B', customer_email: 'client.b@email.com', invoice_no: 'INV-002', item_description: 'Business Cards (x250)', quantity: 1, unit_price: 150 },
-    ]
-    const worksheet = XLSX.utils.json_to_sheet(sampleData)
-    const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Invoices')
-    XLSX.writeFile(workbook, 'invoice_template.xlsx')
-  }
-
-  // --- Fullscreen Modal ---
-  const isModalOpen = ref(false)
-  const openFullscreen = () => {
-    if (invoices.value.length > 0)
-      isModalOpen.value = true
-    else
-      showNotification('Upload a file and map columns to see a preview.')
-  }
-  const closeFullscreen = () => isModalOpen.value = false
-
-  // --- Lifecycle ---
+  // --- Lifecycle & Watchers ---
   onMounted(() => {
-    loadSettings()
+    if (state.rawRows.length > 0) {
+      loadSettings()
+      autoGuessMappings()
+      applySavedMapping()
+      generateAndPreview()
+    }
   })
 
-  // Auto-save mappings and settings on change
   watch(() => state.mapping, saveMapping, { deep: true })
   watch(() => state.settings, () => saveSettings(false), { deep: true })
-  
-  // Re-generate preview when mappings change
-  watch(() => state.mapping, () => {
-     if (state.rawRows.length > 0) {
-        generateAndPreview()
-     }
-  }, { deep: true });
+
+  watch(() => state.mapping, generateAndPreview, { deep: true });
 
   return {
     state,
@@ -310,16 +238,6 @@ export function useInvoiceGenerator() {
     firstInvoice,
     isProcessing,
     progress,
-    fileInput,
-    isFileUploaded,
-    handleFileChange,
-    triggerFileInput: () => fileInput.value?.click(),
     exportZip,
-    resetApp,
-    downloadTemplate,
-    saveSettings,
-    isModalOpen,
-    openFullscreen,
-    closeFullscreen,
   }
 }
