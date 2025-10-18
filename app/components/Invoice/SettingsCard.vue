@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import type { Settings } from '~/composables/useInvoiceGenerator'
+import { useUserProfile } from '~/composables/useUserProfile'
+import { useNotification } from '~/composables/useNotification'
 
 const props = defineProps<{
   settings: Settings
@@ -12,6 +14,21 @@ const localSettings = computed({
     emit('update:settings', value)
   },
 })
+
+const user = useSupabaseUser()
+const { isPro, isLoadingProfile } = useUserProfile()
+const { showNotification } = useNotification()
+
+const handleProFeatureClick = () => {
+  if (!user.value) {
+    showNotification('Please log in to use Pro features.')
+    return navigateTo('/login')
+  }
+  if (!isPro.value) {
+    return emit('openUpgradeModal')
+  }
+  showNotification('Pro Feature: Logic for saving/reusing profiles would run here.')
+}
 </script>
 
 <template>
@@ -35,7 +52,7 @@ const localSettings = computed({
                     </label>
                     <div><div class="text-[12px] text-slate-500">Your Logo</div><input type="file" class="form-input file:mr-2 file:rounded file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-[12px] file:font-medium file:text-slate-700 hover:file:bg-slate-200"/></div>
                     <div class="pt-2">
-                        <button class="btn-pro !py-1.5 w-full pro-feature-trigger" @click.prevent="$emit('openUpgradeModal')">
+                        <button @click.prevent="handleProFeatureClick" :disabled="isLoadingProfile" class="btn-pro !py-1.5 w-full">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-4 h-4 mr-1.5"><path fill-rule="evenodd" d="M8 1.75a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0V2.5A.75.75 0 0 1 8 1.75Zm.89 5.03A.75.75 0 0 1 9.75 6h.5a.75.75 0 0 1 0 1.5h-.5a.75.75 0 0 1-.86-.72ZM5.75 7.5a.75.75 0 0 1 .75-.75h.5a.75.75 0 0 1 0 1.5h-.5a.75.75 0 0 1-.75-.75Zm.86 3.22a.75.75 0 0 1 1.04-.22l.4.3a.75.75 0 0 1-1.04 1.08l-.4-.3a.75.75 0 0 1 .02-1.06ZM10.5 10a.75.75 0 0 1 .75.75v.5a.75.75 0 0 1-1.5 0v-.5a.75.75 0 0 1 .75-.75Z" clip-rule="evenodd" /><path d="M6 5.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5H6.75A.75.75 0 0 1 6 5.25Zm0 5.5a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5H6.75a.75.75 0 0 1-.75-.75Z" /><path fill-rule="evenodd" d="M3 1.75C3 .784 3.784 0 4.75 0h6.5C12.216 0 13 .784 13 1.75v12.5c0 .966-.784 1.75-1.75 1.75h-6.5C3.784 16 3 15.216 3 14.25V1.75Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h6.5a.25.25 0 0 0 .25-.25V1.75a.25.25 0 0 0-.25-.25h-6.5Z" clip-rule="evenodd" /></svg>
                             Save and Reuse Profile (Pro)
                         </button>

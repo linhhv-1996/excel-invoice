@@ -8,7 +8,7 @@ defineEmits(['upload'])
         <span class="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-ink text-xs text-white dark:bg-white dark:text-ink">EX</span>
         <span>Excel → Invoice</span>
       </a>
-      <nav class="items-center gap-6 text-sm md:flex">
+      <nav class="items-center gap-6 text-sm hidden md:flex">
         <a href="#features" class="hover:opacity-80">Features</a>
         <a href="#how" class="hover:opacity-80">How it works</a>
         <a href="#faq" class="hover:opacity-80">FAQ</a>

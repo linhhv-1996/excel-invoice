@@ -22,6 +22,7 @@ export interface Invoice {
   lines: InvoiceLine[]
 }
 export interface Mapping {
+  isGroupingEnabled: boolean
   customer: string
   email: string
   invoiceNo: string
@@ -62,6 +63,7 @@ export function useInvoiceGenerator() {
   const state = reactive({
     rawRows: rawRows,
     fileName: fileName,
+    isGroupingEnabled: true,
     mapping: {
       customer: '', email: '', invoiceNo: '', desc: '', qty: '', unit: '', groupBy: '',
     } as Mapping,
@@ -120,34 +122,75 @@ export function useInvoiceGenerator() {
      return [state.mapping.customer, state.mapping.desc, state.mapping.qty, state.mapping.unit].every(s => !!s)
   }
 
-  const groupInvoices = (rows: any[], mapping: Mapping): Invoice[] => {
-    const groups = new Map<string, Invoice>()
-    for (const r of rows) {
-      const customer = String(r[mapping.customer] ?? '').trim()
-      if (!customer)
-        continue
-      const grpVal = mapping.groupBy && mapping.groupBy !== '-- No Grouping --' ? String(r[mapping.groupBy] ?? '').trim() : ''
-      const key = grpVal ? `${customer}__SEP__${grpVal}` : customer
-      if (!groups.has(key))
-        groups.set(key, { customer, email: r[mapping.email] || '', groupBy: grpVal, invoiceNo: '', lines: [] })
+  // Trong file: app/composables/useInvoiceGenerator.ts
 
-      const g = groups.get(key)!
+const groupInvoices = (rows: any[], mapping: Mapping): Invoice[] => {
+  // Logic mới sẽ dựa vào checkbox isGroupingEnabled
+  if (!mapping.isGroupingEnabled) {
+    // TRƯỜNG HỢP 1: KHÔNG GOM NHÓM
+    // Tạo một hóa đơn cho mỗi dòng
+    return rows.map((r, index) => {
+      const customer = String(r[mapping.customer] ?? '').trim()
+      if (!customer) return null // Bỏ qua dòng trống
+
       const qty = Number(r[mapping.qty]) || 0
       const unit = Number(r[mapping.unit]) || 0
-      g.lines.push({ desc: String(r[mapping.desc] || '').trim(), qty, unit, total: qty * unit })
-      if (!g.invoiceNo && mapping.invoiceNo && r[mapping.invoiceNo])
-        g.invoiceNo = String(r[mapping.invoiceNo])
+
+      return {
+        customer,
+        email: r[mapping.email] || '',
+        groupBy: '',
+        invoiceNo: r[mapping.invoiceNo] || `INV-${index + 1}`,
+        lines: [{
+          desc: String(r[mapping.desc] || '').trim(),
+          qty,
+          unit,
+          total: qty * unit
+        }]
+      }
+    }).filter(Boolean) as Invoice[]
+  }
+
+  // TRƯỜG HỢP 2: CÓ GOM NHÓM (Logic cũ của bạn, đã được tối ưu)
+  const groupColumn = mapping.groupBy
+  if (!groupColumn || groupColumn === '-- No Grouping --') {
+    // Nếu bật group nhưng chưa chọn cột, trả về mảng rỗng
+    return []
+  }
+
+  const groups = new Map<string, Invoice>()
+  for (const r of rows) {
+    const key = String(r[groupColumn] ?? '').trim()
+    if (!key) continue
+
+    if (!groups.has(key)) {
+      groups.set(key, {
+        customer: String(r[mapping.customer] ?? '').trim(),
+        email: r[mapping.email] || '',
+        groupBy: key,
+        invoiceNo: '', // Sẽ đánh số sau
+        lines: []
+      })
     }
 
-    let i = 1
-    for (const g of groups.values()) {
-      if (!g.invoiceNo) {
-        g.invoiceNo = `INV-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(i).padStart(3, '0')}`
-      }
-      i++
-    }
-    return Array.from(groups.values())
+    const g = groups.get(key)!
+    const qty = Number(r[mapping.qty]) || 0
+    const unit = Number(r[mapping.unit]) || 0
+    g.lines.push({ desc: String(r[mapping.desc] || '').trim(), qty, unit, total: qty * unit })
   }
+
+  let i = 1
+  for (const g of groups.values()) {
+    if (!g.invoiceNo) {
+      // Logic tạo số hóa đơn của bạn
+      g.invoiceNo = `INV-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(i).padStart(3, '0')}`
+    }
+    i++
+  }
+  return Array.from(groups.values())
+}
+
+
 
   const generateAndPreview = () => {
     if (!validateMapping()) {

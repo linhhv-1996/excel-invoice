@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import type { Mapping } from '~/composables/useInvoiceGenerator'
+import { useUserProfile } from '~/composables/useUserProfile'
+import { useNotification } from '~/composables/useNotification'
 
 const props = defineProps<{
   headers: string[]
@@ -14,6 +16,23 @@ const localMapping = computed({
     emit('update:mapping', value)
   },
 })
+
+const user = useSupabaseUser()
+const { isPro, isLoadingProfile } = useUserProfile()
+const { showNotification } = useNotification()
+
+const handleProFeatureClick = () => {
+  if (!user.value) {
+    showNotification('Please log in to use Pro features.')
+    return navigateTo('/login')
+  }
+  
+  if (!isPro.value) {
+    return emit('openUpgradeModal')
+  }
+
+  showNotification('Pro Feature: Logic for saving/loading templates would run here.')
+}
 </script>
 <template>
     <div class="rounded-xl border border-slate-200">
@@ -24,20 +43,20 @@ const localMapping = computed({
             <div id="mapping-template-section" class="mb-3 rounded-md border border-slate-200 p-3">
                 <h3 class="text-[12px] font-medium uppercase tracking-wide text-slate-500">Mapping Templates <span class="pro-feature-badge">Pro</span></h3>
                 <div class="mt-2 grid grid-cols-3 gap-2">
-                    <select id="mapping-template-select" class="form-select-pro col-span-3 md:col-span-2 pro-feature-trigger cursor-pointer" @click.prevent="$emit('openUpgradeModal')"><option>Load saved template...</option></select>
+                    <select @click.prevent="handleProFeatureClick" :disabled="isLoadingProfile" id="mapping-template-select" class="form-select-pro col-span-3 md:col-span-2 cursor-pointer"><option>Load saved template...</option></select>
                     <div class="col-span-3 md:col-span-1 flex gap-2">
-                        <button id="load-template-btn" class="btn w-full pro-feature-trigger" @click.prevent="$emit('openUpgradeModal')">Load</button>
-                        <button id="save-template-btn" class="btn w-full pro-feature-trigger" @click.prevent="$emit('openUpgradeModal')">Save</button>
+                        <button @click.prevent="handleProFeatureClick" :disabled="isLoadingProfile" id="load-template-btn" class="btn w-full">Load</button>
+                        <button @click.prevent="handleProFeatureClick" :disabled="isLoadingProfile" id="save-template-btn" class="btn w-full">Save</button>
                     </div>
                 </div>
             </div>
 
             <div class="space-y-2 rounded-md border border-slate-200 p-3">
-                <label class="flex items-center gap-2"><input type="checkbox" class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" checked/><span class="text-[13px] font-medium text-ink">Group rows into single invoices</span></label>
+                <label class="flex items-center gap-2"><input type="checkbox" v-model="localMapping.isGroupingEnabled" class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"/><span class="text-[13px] font-medium text-ink">Group rows into single invoices</span></label>
                 <p class="text-[12px] text-slate-600">Use this if multiple rows in your file belong to the same invoice.</p>
                 <label class="block pt-1">
                     <div class="text-[12px] text-slate-500">Group by column <span class="text-red-500">*</span></div>
-                    <select class="form-select" v-model="localMapping.groupBy">
+                    <select class="form-select" v-model="localMapping.groupBy" :disabled="!localMapping.isGroupingEnabled">
                          <option value="">-- No Grouping --</option>
                          <option v-for="header in headers" :key="header" :value="header">{{ header }}</option>
                     </select>

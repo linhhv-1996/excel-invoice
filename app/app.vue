@@ -1,14 +1,20 @@
 <script setup lang="ts">
 import { useFileUploader } from '~/composables/useFileUploader';
+import { useUserProfile } from '~/composables/useUserProfile';
 
-// Lấy ref và hàm xử lý từ composable mới
 const { fileInput, handleFileChange } = useFileUploader();
+const user = useSupabaseUser();
+const { fetchProfile } = useUserProfile();
+
+// Theo dõi user state, nếu có thì lấy profile
+watch(user, () => {
+  fetchProfile();
+}, { immediate: true });
 </script>
 
 <template>
   <div>
     <NuxtPage />
-
     <input
       ref="fileInput"
       type="file"
@@ -17,6 +23,4 @@ const { fileInput, handleFileChange } = useFileUploader();
       @change="handleFileChange"
     >
   </div>
-
-  <Footer />
 </template>
