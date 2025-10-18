@@ -4,11 +4,13 @@ import { useDb } from '~/composables/useDb'
 import { useExcelData } from '~/composables/useSharedState'
 import { useFileUploader } from '~/composables/useFileUploader';
 import { useNotification } from '~/composables/useNotification';
+import { useUserProfile } from '~/composables/useUserProfile'; // Thêm import
 
 const { rawRows, fileName } = useExcelData()
 const { loadSession } = useDb()
 const { triggerFileInput } = useFileUploader();
 const { showNotification } = useNotification();
+const { isPro } = useUserProfile(); // Lấy trạng thái isPro
 
 const isLoading = ref(true)
 
@@ -26,7 +28,14 @@ const {
   headers,
   invoices,
   firstInvoice,
+  exportZip, // Thêm exportZip
 } = useInvoiceGenerator()
+
+// Cập nhật freeMode dựa trên trạng thái isPro
+watch(isPro, (value) => {
+  state.settings.freeMode = !value;
+}, { immediate: true });
+
 
 const showUpgradeModal = ref(false)
 const showDetailsModal = ref(false)
@@ -47,7 +56,12 @@ function handleExportClick() {
         showNotification('Please upload and map your file before exporting.');
         return;
     }
-    showUpgradeModal.value = true;
+    // Sửa logic ở đây
+    if (isPro.value) {
+      exportZip();
+    } else {
+      showUpgradeModal.value = true;
+    }
 }
 </script>
 

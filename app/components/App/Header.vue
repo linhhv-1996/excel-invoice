@@ -1,11 +1,14 @@
 <script setup lang="ts">
+import { useUserProfile } from '~/composables/useUserProfile'; // Thêm import
+
 defineProps<{
   isPreviewReady: boolean,
   exportCount: number,
 }>()
-const emit = defineEmits(['changeFile', 'export', 'openUpgradeModal']) // Thêm 'openUpgradeModal'
+const emit = defineEmits(['changeFile', 'export', 'openUpgradeModal'])
 const user = useSupabaseUser()
 const supabase = useSupabaseClient()
+const { isPro } = useUserProfile(); // Lấy trạng thái isPro
 
 async function handleLogout() {
   await supabase.auth.signOut()
@@ -30,7 +33,7 @@ async function handleLogout() {
                 </div>
                  
                  <div class="flex items-center gap-2">
-                    <button @click="$emit('openUpgradeModal')" class="btn-pro">Upgrade to Pro</button>
+                    <button v-if="!isPro" @click="$emit('openUpgradeModal')" class="btn-pro">Upgrade to Pro</button>
 
                     <template v-if="!user">
                         <a href="/login" class="btn">Login</a>
