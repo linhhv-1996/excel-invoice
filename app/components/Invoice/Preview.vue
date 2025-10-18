@@ -35,25 +35,23 @@ const total = computed(() => subtotal.value + taxAmount.value)
         <div id="preview-content" class="rounded-xl border border-slate-200">
             <div v-if="invoice" class="p-4">
                 <div v-if="settings.template === 'modern'">
-                     <div class="flex items-start justify-between">
-                        <div class="text-[15px] font-semibold text-ink">{{ settings.cName }}</div>
-                        <div class="text-right text-[12px]">
-                            <div class="font-semibold">INVOICE</div>
-                            <div>#{{ invoice.invoiceNo }}</div>
-                        </div>
-                    </div>
-                    <div class="mt-3 flex justify-between text-[12px]">
+                     <div class="grid grid-cols-2 gap-4">
                         <div>
-                            <div class="font-medium text-slate-700">Bill To</div>
-                            <div>{{ invoice.customer }}</div>
-                            <div>{{ invoice.email }}</div>
+                            <div class="text-xs text-slate-500">Billed to</div>
+                            <div class="text-base font-bold">{{ invoice.customer }}</div>
+                            <div class="text-xs text-slate-500">{{ invoice.email }}</div>
                         </div>
                         <div class="text-right">
-                            <div class="font-medium text-slate-700">From</div>
-                            <div>{{ settings.cName }}</div>
+                            <div class="text-sm font-bold">{{ settings.cName }}</div>
+                            <div class="text-xs text-slate-500">
+                                {{ settings.cAddr }}
+                                <span v-if="settings.cTax"> • TAX: {{ settings.cTax }}</span>
+                            </div>
+                            <div class="mt-1 text-xs text-slate-500">Invoice #: <span class="font-semibold text-ink">{{ invoice.invoiceNo }}</span></div>
+                            <div class="text-xs">Date: {{ new Date().toLocaleDateString(settings.locale) }}</div>
                         </div>
                     </div>
-                    </div>
+                </div>
                 <div v-if="settings.template === 'classic'" class="font-serif">
                      <div class="text-center">
                         <div class="text-2xl font-bold">{{ settings.cName }}</div>
@@ -70,7 +68,7 @@ const total = computed(() => subtotal.value + taxAmount.value)
                              <div class="text-xs">Date: {{ new Date().toLocaleDateString(settings.locale) }}</div>
                         </div>
                      </div>
-                    </div>
+                </div>
                  <div v-if="settings.template === 'technical'" class="font-mono text-xs">
                     <p class="text-base text-slate-500">// INVOICE DOCUMENT</p>
                     <div class="mt-4 grid grid-cols-2 gap-4">
@@ -117,7 +115,7 @@ const total = computed(() => subtotal.value + taxAmount.value)
                     </div>
                 </div>
 
-                <div v-if="['modern', 'classic'].includes(settings.template)" class="mt-4 overflow-hidden rounded-lg border border-slate-200">
+                <div v-if="['modern', 'classic', 'technical'].includes(settings.template)" class="mt-4 overflow-hidden rounded-lg border border-slate-200">
                     <table class="w-full text-[12px]">
                         <thead class="bg-slate-50">
                             <tr>
