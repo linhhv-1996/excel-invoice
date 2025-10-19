@@ -49,3 +49,7 @@ html, body { height: 100%; }
   background: rgba(255, 255, 255, .7);
 }
 
+.btnDeleteSetting svg {
+    width: 15px;
+    color: red;
+}

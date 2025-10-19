@@ -14,6 +14,7 @@ export interface InvoiceLine {
   unit: number
   total: number
 }
+
 export interface Invoice {
   customer: string
   email: string
@@ -21,6 +22,7 @@ export interface Invoice {
   invoiceNo: string
   lines: InvoiceLine[]
 }
+
 export interface Mapping {
   isGroupingEnabled: boolean
   customer: string
@@ -31,8 +33,10 @@ export interface Mapping {
   unit: string
   groupBy: string
 }
+
 // **** UPDATED ****
 export interface Settings {
+  cTax: any
   cName: string
   cEmail: string
   cAddr: string

@@ -1,16 +1,18 @@
 // app/composables/useUserProfile.ts
-import { ref, watch, computed } from 'vue'
+import { ref, watchEffect, computed } from 'vue'
 
 export const useUserProfile = () => {
-  // SỬA LỖI: Di chuyển 2 dòng này vào BÊN TRONG function để đúng ngữ cảnh Nuxt
   const userProfile = useState('userProfile', () => null as { subscription_tier: string } | null)
   const isLoadingProfile = useState('isLoadingProfile', () => true)
 
   const supabase = useSupabaseClient()
   const user = useSupabaseUser()
 
-  const fetchProfile = async () => {
-    if (!user.value) {
+  watchEffect(async () => {
+    // SỬA LỖI: Lấy user ID từ `user.value.id` hoặc `user.value.sub`
+    const userId = user.value?.id || (user.value as any)?.sub;
+
+    if (!userId) {
       userProfile.value = null
       isLoadingProfile.value = false
       return
@@ -21,10 +23,10 @@ export const useUserProfile = () => {
       const { data, error } = await supabase
         .from('user_profiles')
         .select('subscription_tier')
-        .eq('id', user.value.id)
+        .eq('id', userId)
         .single()
 
-      if (error && error.code !== 'PGRST116') { // Bỏ qua lỗi "không tìm thấy dòng", vì user mới có thể chưa có profile ngay
+      if (error && error.code !== 'PGRST116') {
         throw error
       }
       
@@ -35,10 +37,7 @@ export const useUserProfile = () => {
     } finally {
       isLoadingProfile.value = false
     }
-  }
-
-  // Theo dõi user state, nếu có thì lấy profile. Sẽ tự chạy khi app mở.
-  watch(user, fetchProfile, { immediate: true })
+  })
 
   const isPro = computed(() => {
     const tier = userProfile.value?.subscription_tier
@@ -49,6 +48,5 @@ export const useUserProfile = () => {
     userProfile,
     isLoadingProfile,
     isPro,
-    fetchProfile
   }
 }
