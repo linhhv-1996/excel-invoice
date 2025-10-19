@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, computed, inject } from 'vue'
+import { ref, onMounted, watch, computed, inject, nextTick } from 'vue'
 import type { Settings } from '~/composables/useInvoiceGenerator'
 import { useUserProfile } from '~/composables/useUserProfile'
-import { useSenderProfiles, type SenderProfile } from '~/composables/useSenderProfiles'
+import { useInvoicePresets, type InvoicePreset } from '~/composables/useInvoicePresets'
+import type { InvoicePresetData } from '~/server/api/invoice-presets'
+import { useNotification } from '~/composables/useNotification'
 
 const props = defineProps<{ settings: Settings }>()
 const emit = defineEmits(['update:settings', 'openUpgradeModal'])
@@ -14,99 +16,131 @@ const localSettings = computed({
 
 // --- State Quản lý ---
 const { isPro } = useUserProfile()
-const { profiles, isLoading: isLoadingProfiles, fetchProfiles, saveProfile, updateProfile, deleteProfile } = useSenderProfiles()
+const { presets, isLoading: isLoadingPresets, fetchPresets, savePreset, updatePreset, deletePreset } = useInvoicePresets()
 const showConfirm = inject('showConfirm') as (title: string, message: string, onConfirm: () => void) => void;
+const { showNotification } = useNotification()
 
-const newProfileName = ref('')
-const selectedProfileId = ref<number | null>(null)
-const activeProfile = ref<SenderProfile | null>(null)
+const newPresetName = ref('')
+const selectedPresetId = ref<number | null>(null)
 const isDirty = ref(false)
+let isProgrammaticChange = false // Flag để tránh race condition
 
-// Tải danh sách profile
+// --- Lifecycle & Watchers ---
 onMounted(() => {
-  if (isPro.value) fetchProfiles()
+  if (isPro.value) fetchPresets()
 })
 watch(isPro, (isUserPro) => {
-  if (isUserPro && profiles.value.length === 0) fetchProfiles()
+  if (isUserPro && presets.value.length === 0) fetchPresets()
 })
 
-// Theo dõi thay đổi của các trường thông tin so với profile đã load
-watch(localSettings, (newData) => {
-    if(activeProfile.value) {
-        const currentData = JSON.stringify({cName: newData.cName, cEmail: newData.cEmail, cAddr: newData.cAddr});
-        const originalData = JSON.stringify(activeProfile.value.profile_data);
-        isDirty.value = currentData !== originalData;
+watch(selectedPresetId, (newId) => {
+  if (!newId) {
+    isDirty.value = false;
+    return;
+  }
+  proFeatureGuard(() => {
+    const preset = presets.value.find(p => p.id === newId);
+    if (preset) {
+      isProgrammaticChange = true;
+      Object.assign(localSettings.value, preset.profile_data);
+      showNotification(`Preset "${preset.profile_name}" loaded!`);
+      isDirty.value = false;
+      nextTick(() => {
+        isProgrammaticChange = false;
+      });
+    }
+  });
+});
+
+// *** LOGIC ĐÃ ĐƯỢC SỬA LỖI HOÀN CHỈNH ***
+watch(localSettings, (newSettings) => {
+    if (isProgrammaticChange) return;
+
+    if (selectedPresetId.value) {
+        const selectedPreset = presets.value.find(p => p.id === selectedPresetId.value);
+        if (selectedPreset) {
+            // Helper để tạo một object preset data chuẩn hóa
+            const normalize = (s: Partial<Settings>): InvoicePresetData => ({
+                cName: s.cName || '',
+                cEmail: s.cEmail || '',
+                cAddr: s.cAddr || '',
+                cTax: s.cTax || '',
+                template: s.template || 'modern',
+                fileNamePattern: s.fileNamePattern || '',
+                startInvoiceNumber: s.startInvoiceNumber || '',
+                currency: s.currency || 'USD',
+                locale: s.locale || 'en-US',
+                taxPercent: s.taxPercent || 0,
+            });
+
+            const currentData = normalize(newSettings);
+            const originalData = normalize(selectedPreset.profile_data);
+
+            isDirty.value = JSON.stringify(currentData) !== JSON.stringify(originalData);
+        }
+    } else {
+        isDirty.value = false;
     }
 }, { deep: true });
 
-// **LOGIC CHÍNH: Khi người dùng chọn một profile khác trong dropdown**
-watch(selectedProfileId, (newId) => {
-    // Nếu ID được chọn khác với profile đang active -> reset, đưa về trạng thái "Load"
-    if (activeProfile.value && activeProfile.value.id !== newId) {
-        activeProfile.value = null;
-        isDirty.value = false;
-    }
-})
-
 
 // --- Các hàm xử lý hành động ---
-
 const proFeatureGuard = (action: Function) => {
-  if (!isPro.value) return emit('openUpgradeModal');
+  if (!isPro.value) {
+    emit('openUpgradeModal');
+    return false;
+  }
   action();
+  return true;
 }
 
-const handleSaveNewProfile = async () => {
-    proFeatureGuard(async () => {
-        const dataToSave = { cName: localSettings.value.cName, cEmail: localSettings.value.cEmail, cAddr: localSettings.value.cAddr };
-        const savedProfile = await saveProfile(newProfileName.value, dataToSave);
-        if(savedProfile) {
-            newProfileName.value = '';
-            activeProfile.value = savedProfile; // Tự động active profile vừa lưu
-            selectedProfileId.value = savedProfile.id;
-        }
-    });
+const getPresetDataFromSettings = (): InvoicePresetData => {
+    const { freeMode, logo, ...rest } = localSettings.value;
+    return rest;
 }
 
-const handleUpdateProfile = async () => {
-    if (!activeProfile.value) return;
-    proFeatureGuard(async () => {
-        const dataToUpdate = { cName: localSettings.value.cName, cEmail: localSettings.value.cEmail, cAddr: localSettings.value.cAddr };
-        const updated = await updateProfile(activeProfile.value.id, dataToUpdate);
-        if(updated) {
-            activeProfile.value = updated;
-            isDirty.value = false;
-        }
-    });
+const handleSaveNewPreset = async () => {
+    if (!proFeatureGuard(() => {})) return;
+    
+    const dataToSave = getPresetDataFromSettings();
+    const savedPreset = await savePreset(newPresetName.value, dataToSave);
+    
+    if(savedPreset) {
+        newPresetName.value = ''; 
+        selectedPresetId.value = savedPreset.id; 
+    }
 }
 
-const handleLoadProfile = () => {
-    proFeatureGuard(() => {
-        const profile = profiles.value.find(p => p.id === selectedProfileId.value);
-        if (profile) {
-            localSettings.value.cName = profile.profile_data.cName || '';
-            localSettings.value.cEmail = profile.profile_data.cEmail || '';
-            localSettings.value.cAddr = profile.profile_data.cAddr || '';
-            activeProfile.value = JSON.parse(JSON.stringify(profile)); // Deep clone để so sánh
-            isDirty.value = false;
-        }
-    });
+const handleUpdatePreset = async () => {
+    const preset = presets.value.find(p => p.id === selectedPresetId.value);
+    if (!preset) return;
+    if (!proFeatureGuard(() => {})) return;
+
+    const dataToUpdate = getPresetDataFromSettings();
+    const updated = await updatePreset(preset.id, dataToUpdate);
+    if(updated) {
+        isDirty.value = false;
+    }
 }
 
-const handleDeleteProfile = () => {
-    if (!activeProfile.value) return;
+const handleDeletePreset = () => {
+    const preset = presets.value.find(p => p.id === selectedPresetId.value);
+    if (!preset) return;
     showConfirm(
-      'Delete Profile',
-      `Are you sure you want to delete the "${activeProfile.value.profile_name}" profile? This action cannot be undone.`,
-      async () => {
-        const success = await deleteProfile(activeProfile.value!.id);
-        if(success) {
-            localSettings.value.cName = 'Your Company';
-            localSettings.value.cEmail = 'you@example.com';
-            localSettings.value.cAddr = '123 Your Street, City';
-            activeProfile.value = null;
-            selectedProfileId.value = null;
-        }
+      'Delete Preset',
+      `Are you sure you want to delete the "${preset.profile_name}" preset? This action cannot be undone.`,
+      () => {
+        if (!proFeatureGuard(() => {})) return;
+        deletePreset(preset.id).then(success => {
+            if(success) {
+                selectedPresetId.value = null;
+                Object.assign(localSettings.value, {
+                    cName: 'Your Company', cEmail: 'you@example.com', cAddr: '123 Your Street, City',
+                    template: 'modern', fileNamePattern: 'invoice_{client}_{date}', startInvoiceNumber: 'INV-001',
+                    currency: 'USD', locale: 'en-US', taxPercent: 10
+                });
+            }
+        });
     });
 }
 </script>
@@ -117,35 +151,35 @@ const handleDeleteProfile = () => {
         <div class="p-3 pt-0">
             <div class="mb-4 rounded-md border border-slate-200 p-3 space-y-3">
                 <h3 class="text-[12px] font-medium uppercase tracking-wide text-slate-500 flex items-center">
-                    Sender Profiles <span class="pro-feature-badge ml-2">Pro</span>
+                    Invoice Presets <span class="pro-feature-badge ml-2">Pro</span>
                 </h3>
 
-                <div class="grid grid-cols-3 gap-2">
-                    <select v-model="selectedProfileId" :disabled="!isPro || isLoadingProfiles" class="form-select-pro col-span-2 cursor-pointer !mt-0">
-                        <option :value="null" disabled>{{ isPro ? 'Select a profile...' : 'Feature available for Pro' }}</option>
-                        <option v-for="p in profiles" :key="p.id" :value="p.id">{{ p.profile_name }}</option>
+                <div v-if="isPro && presets.length === 0 && !isLoadingPresets" class="bg-slate-50 text-center p-4 rounded-md text-sm text-slate-600">
+                    <p>You haven't saved any presets yet.</p>
+                    <p class="mt-1">Fill in all settings below, then save them as a preset for quick access!</p>
+                </div>
+
+                <div v-else class="flex items-center gap-2">
+                    <select v-model="selectedPresetId" :disabled="!isPro || isLoadingPresets" class="form-select-pro flex-grow cursor-pointer !mt-0">
+                        <option :value="null">{{ isPro ? 'Load a preset...' : 'Feature available for Pro' }}</option>
+                        <option v-for="p in presets" :key="p.id" :value="p.id">{{ p.profile_name }}</option>
                     </select>
                     
-                    <div v-if="activeProfile && activeProfile.id === selectedProfileId" class="flex gap-2">
-                        <button @click="handleUpdateProfile" :disabled="!isDirty || isLoadingProfiles" class="btn-primary w-full">
+                    <template v-if="selectedPresetId">
+                        <button @click="handleUpdatePreset" :disabled="!isDirty || isLoadingPresets" class="btn-primary">
                             {{ isDirty ? 'Update' : 'Saved' }}
                         </button>
-                        <button @click="handleDeleteProfile" :disabled="isLoadingProfiles" class="btn bg-red-50 text-red-700 border-red-200 hover:bg-red-100 px-2 btnDeleteSetting" title="Delete profile">
-                        
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6"><path fill-rule="evenodd" d="M9 2a2 2 0 0 0-2 2v2H3v2h1.1l1.2 13.4A2 2 0 0 0 7.3 24h9.4a2 2 0 0 0 2-2.6L19.9 8H21V6h-4V4a2 2 0 0 0-2-2H9Zm2 5v12a1 1 0 1 1-2 0V7h2Zm4 0v12a1 1 0 1 1-2 0V7h2Z" clip-rule="evenodd"></path></svg>
-                        
+                        <button @click="handleDeletePreset" :disabled="isLoadingPresets" class="btn bg-red-50 text-red-700 border-red-200 hover:bg-red-100 px-2 btnDeleteSetting" title="Delete preset">
+                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6"><path fill-rule="evenodd" d="M9 2a2 2 0 0 0-2 2v2H3v2h1.1l1.2 13.4A2 2 0 0 0 7.3 24h9.4a2 2 0 0 0 2-2.6L19.9 8H21V6h-4V4a2 2 0 0 0-2-2H9Zm2 5v12a1 1 0 1 1-2 0V7h2Zm4 0v12a1 1 0 1 1-2 0V7h2Z" clip-rule="evenodd"></path></svg>
                         </button>
-                    </div>
-                    <button v-else @click="handleLoadProfile" :disabled="!selectedProfileId || isLoadingProfiles" class="btn w-full">
-                        Load
-                    </button>
+                    </template>
                 </div>
                 
                 <div class="border-t border-slate-200 my-2"></div>
 
                 <div class="grid grid-cols-3 gap-2">
-                    <input type="text" placeholder="Save current as new profile..." v-model="newProfileName" :disabled="!isPro || isLoadingProfiles" class="form-input col-span-2 !mt-0" />
-                    <button @click="handleSaveNewProfile" :disabled="!newProfileName || isLoadingProfiles" class="btn w-full">Save New</button>
+                    <input type="text" placeholder="Save current settings as new preset..." v-model="newPresetName" :disabled="!isPro || isLoadingPresets" class="form-input col-span-2 !mt-0" />
+                    <button @click="handleSaveNewPreset" :disabled="!newPresetName || isLoadingPresets" class="btn-primary w-full">Save New</button>
                 </div>
             </div>
 
