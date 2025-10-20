@@ -4,13 +4,13 @@ import { useDb } from '~/composables/useDb'
 import { useExcelData } from '~/composables/useSharedState'
 import { useFileUploader } from '~/composables/useFileUploader';
 import { useNotification } from '~/composables/useNotification';
-import { useUserProfile } from '~/composables/useUserProfile'; // Thêm import
+import { useUserProfile } from '~/composables/useUserProfile';
 
 const { rawRows, fileName } = useExcelData()
 const { loadSession } = useDb()
 const { triggerFileInput } = useFileUploader();
 const { showNotification } = useNotification();
-const { isPro } = useUserProfile(); // Lấy trạng thái isPro
+const { isPro, userProfile } = useUserProfile();
 
 const isLoading = ref(true)
 
@@ -28,7 +28,8 @@ const {
   headers,
   invoices,
   firstInvoice,
-  exportZip, // Thêm exportZip
+  exportZip,
+  isProcessing, // Thêm isProcessing để vô hiệu hóa nút khi đang xử lý
 } = useInvoiceGenerator()
 
 // Cập nhật freeMode dựa trên trạng thái isPro
@@ -39,6 +40,7 @@ watch(isPro, (value) => {
 
 const showUpgradeModal = ref(false)
 const showDetailsModal = ref(false)
+const showWatermarkConfirmModal = ref(false)
 const selectedInvoiceForDetails = ref(null)
 
 function viewDetails(invoice: any) {
@@ -51,18 +53,59 @@ function handleFileTrigger() {
   triggerFileInput();
 }
 
-function handleExportClick() {
-    if (invoices.value.length === 0) {
+// *** LOGIC MỚI CHO NÚT EXPORT ***
+async function handleExportClick() {
+    const invoicesToExport = invoices.value.length;
+    if (invoicesToExport === 0) {
         showNotification('Please upload and map your file before exporting.');
         return;
     }
-    // Sửa logic ở đây
-    if (isPro.value) {
-      exportZip();
-    } else {
-      showUpgradeModal.value = true;
+
+    // Nếu là người dùng free, chỉ hiển thị modal nâng cấp
+    if (!userProfile.value || userProfile.value.subscription_tier === 'free') {
+        showWatermarkConfirmModal.value = true;
+    }
+
+    // Nếu là người dùng gói Personal, kiểm tra giới hạn
+    if (userProfile.value.subscription_tier === 'personal') {
+        isProcessing.value = true; // Bắt đầu xử lý
+        try {
+            const result = await $fetch('/api/usage', {
+                method: 'POST',
+                body: { invoicesToExport }
+            });
+
+            if (result.canExport) {
+                await exportZip(); // Nếu được phép, tiến hành export
+            } else {
+                showNotification(result.message || 'You have reached your monthly invoice limit.');
+                showUpgradeModal.value = true; // Mở modal để họ nâng cấp lên Pro
+            }
+        } catch (error: any) {
+            showNotification(error.data?.message || 'Could not verify usage. Please try again.');
+        } finally {
+            isProcessing.value = false; // Kết thúc xử lý
+        }
+        return;
+    }
+
+    // Nếu là người dùng Pro (không giới hạn), export luôn
+    if (userProfile.value.subscription_tier === 'pro') {
+        await exportZip();
     }
 }
+
+function handleConfirmExportWithWatermark() {
+    exportZip();
+    showWatermarkConfirmModal.value = false;
+}
+
+// Xử lý khi người dùng muốn nâng cấp
+function handleTriggerUpgradeFromModal() {
+    showWatermarkConfirmModal.value = false;
+    showUpgradeModal.value = true;
+}
+
 </script>
 
 <template>
@@ -102,9 +145,9 @@ function handleExportClick() {
       </section>
 
       <aside class="relative md:col-span-2">
-          <div class="sticky top-20 space-y-3 border px-4 py-2 rounded-xl">
+          <div class="sticky top-20 space-y-3 border px-4 py-2 rounded-lg">
               <InvoicePreview :invoice="firstInvoice" :settings="state.settings" @fullscreen="viewDetails(firstInvoice)" />
-               <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
+               <div v-if="!isPro" class="rounded-xl border border-slate-200 bg-slate-50 p-3">
                   <div class="flex items-center justify-between"><label for="watermark" class="text-[13px] font-medium text-slate-700">Show Watermark</label><input type="checkbox" id="watermark" checked disabled class="h-4 w-4 rounded border-slate-300 text-slate-400 focus:ring-slate-400" /></div>
                   <p class="mt-1 text-[12px] text-slate-500">Upgrade to remove the "Excel → Invoice" watermark.</p>
               </div>
@@ -115,6 +158,14 @@ function handleExportClick() {
     <AppFooter />
     <ModalsUpgradeModal :show="showUpgradeModal" @close="showUpgradeModal = false" />
     <ModalsReviewDetailsModal :show="showDetailsModal" :invoice="selectedInvoiceForDetails" @close="showDetailsModal = false"/>
+    
+    <ModalsWatermarkConfirmModal 
+        :show="showWatermarkConfirmModal" 
+        @close="showWatermarkConfirmModal = false"
+        @confirm="handleConfirmExportWithWatermark"
+        @upgrade="handleTriggerUpgradeFromModal"
+    />
+    
     <AppNotification />
   </div>
   

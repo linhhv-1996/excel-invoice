@@ -9,7 +9,6 @@ export const useUserProfile = () => {
   const user = useSupabaseUser()
 
   watchEffect(async () => {
-    // SỬA LỖI: Lấy user ID từ `user.value.id` hoặc `user.value.sub`
     const userId = user.value?.id || (user.value as any)?.sub;
 
     if (!userId) {
@@ -26,7 +25,7 @@ export const useUserProfile = () => {
         .eq('id', userId)
         .single()
 
-      if (error && error.code !== 'PGRST116') {
+      if (error && error.code !== 'PGRST116') { // PGRST116: No rows found
         throw error
       }
       
@@ -39,9 +38,10 @@ export const useUserProfile = () => {
     }
   })
 
+  // Cập nhật: Bất kỳ ai có gói 'personal' hoặc 'pro' đều được coi là người dùng trả phí
   const isPro = computed(() => {
     const tier = userProfile.value?.subscription_tier
-    return tier === 'pro' || tier === 'business'
+    return tier === 'personal' || tier === 'pro'
   })
 
   return {

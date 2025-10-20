@@ -102,5 +102,7 @@ const { triggerFileInput } = useFileUploader();
   </section>
       <LpCta @upload="triggerFileInput" />
     </main>
+
+    <Footer />
     </div>
 </template>

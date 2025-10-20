@@ -236,9 +236,13 @@ const groupInvoices = (rows: any[], mapping: Mapping): Invoice[] => {
     if (!validateMapping() || invoices.value.length === 0) {
       return showNotification('Please check your file and mappings first.')
     }
-    const limit = state.settings.freeMode ? Math.min(invoices.value.length, 10) : invoices.value.length
+
+    const limit = invoices.value.length
+
     isProcessing.value = true
+
     progress.value = { value: 0, text: `Generating ${limit} PDFs…` }
+
     try {
       const zip = new JSZip()
       for (let i = 0; i < limit; i++) {

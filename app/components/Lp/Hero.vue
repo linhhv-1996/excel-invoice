@@ -69,8 +69,7 @@ defineEmits(['upload'])
                 </div>
               </div>
 
-              <div class="mt-3 grid grid-cols-2 gap-4 text-[13px]">
-                <div class="text-[11px] text-slate-500">Notes: Thank you for your business.</div>
+              <div class="mt-3 grid grid-cols-1 gap-4 text-[13px]">
                 <div class="space-y-1">
                   <div class="flex justify-between"><span class="text-slate-500">Subtotal</span><span>$3,500.00</span></div>
                   <div class="flex justify-between"><span class="text-slate-500">VAT (10%)</span><span>$350.00</span></div>
