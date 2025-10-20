@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { useUserProfile } from '~/composables/useUserProfile'; // Thêm import
+import { useUserProfile } from '~/composables/useUserProfile';
 
 defineProps<{
   isPreviewReady: boolean,
-  exportCount: number,
+  exportCount: number, // Giờ là số lượng đã chọn
+  isExportDisabled?: boolean, // Thêm prop để disable nút khi đang xử lý
+  isExporting?: boolean, // Thêm prop để hiển thị trạng thái đang export
+  exportProgress?: { value: number, text: string } // Thêm prop để hiển thị tiến trình
 }>()
 const emit = defineEmits(['changeFile', 'export', 'openUpgradeModal'])
 const user = useSupabaseUser()
 const supabase = useSupabaseClient()
-const { isPro } = useUserProfile(); // Lấy trạng thái isPro
+const { isPro } = useUserProfile();
 
 async function handleLogout() {
   await supabase.auth.signOut()
@@ -27,11 +30,22 @@ async function handleLogout() {
                     <button @click="$emit('changeFile')" class="btn cursor-pointer">
                         <span class="sm:inline">Change file</span>
                     </button>
-                    <button @click="$emit('export')" class="btn-primary" :disabled="!isPreviewReady">
-                        Export ({{ exportCount }})
+                    <button
+                        @click="$emit('export')"
+                        class="btn-primary relative overflow-hidden"
+                        :disabled="!isPreviewReady || exportCount === 0 || isExportDisabled"
+                        style="min-width: 100px;" 
+                    >
+                         <span v-if="isExporting && exportProgress"
+                              class="absolute inset-0 bg-slate-600/50 flex items-center justify-center text-xs leading-none"
+                              :style="{ transform: `translateX(-${100 - exportProgress.value}%)` }">
+                        </span>
+                         <span class="relative z-10">
+                            {{ isExporting ? (exportProgress?.text || 'Processing...') : `Export (${exportCount})` }}
+                        </span>
                     </button>
                 </div>
-                 
+
                  <div class="flex items-center gap-2">
                     <button v-if="!isPro" @click="$emit('openUpgradeModal')" class="btn-pro">Upgrade to Pro</button>
 

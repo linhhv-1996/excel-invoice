@@ -3,7 +3,7 @@ import { ref, onMounted, watch, inject, computed } from 'vue' // Thêm computed
 import type { Mapping } from '~/composables/useInvoiceGenerator'
 import { useUserProfile } from '~/composables/useUserProfile'
 import { useNotification } from '~/composables/useNotification'
-import { useMappingTemplates, type MappingTemplate } from '~/composables/useMappingTemplates'
+import { useMappingTemplates } from '~/composables/useMappingTemplates'
 
 const props = defineProps<{
   headers: string[]
@@ -172,7 +172,6 @@ const clearSelectedTemplate = () => {
                     <option :value="null">{{ isLoadingTemplates ? 'Loading presets...' : 'Load a preset...' }}</option>
                     <option v-for="template in templates" :key="template.id" :value="template.id">
                         {{ template.template_name }}
-                        <span v-if="selectedTemplateId === template.id && !isMappingDirty">✔</span>
                     </option>
                 </select>
                 <button v-if="selectedTemplateId" @click="clearSelectedTemplate" class="btn text-xs" title="Clear selection">Clear</button>
@@ -180,7 +179,7 @@ const clearSelectedTemplate = () => {
 
           <div v-if="selectedTemplateId" class="flex items-center gap-2">
             <button @click="handleUpdateTemplate" :disabled="!isMappingDirty || isLoadingTemplates" class="btn-primary flex-grow justify-center">
-              <span v-if="!isMappingDirty">✔ Preset Matched</span>
+              <span v-if="!isMappingDirty">Preset Matched</span>
               <span v-else>Update "{{ selectedTemplateName }}"</span>
             </button>
             <button @click="handleDeleteTemplate" :disabled="isLoadingTemplates" class="btn bg-red-50 text-red-700 border-red-200 hover:bg-red-100 px-2 btnDeleteSetting" title="Delete preset">

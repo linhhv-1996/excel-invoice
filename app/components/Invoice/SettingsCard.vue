@@ -195,7 +195,6 @@ const clearSelectedPreset = () => {
                             <option :value="null">{{ isLoadingPresets ? 'Loading presets...' : 'Load a preset...' }}</option>
                             <option v-for="p in presets" :key="p.id" :value="p.id">
                                 {{ p.profile_name }}
-                                <span v-if="selectedPresetId === p.id && !isDirty">✔</span>
                             </option>
                         </select>
                          <button v-if="selectedPresetId" @click="clearSelectedPreset" class="btn text-xs" title="Clear selection">Clear</button>
@@ -203,7 +202,7 @@ const clearSelectedPreset = () => {
 
                      <div v-if="selectedPresetId" class="flex items-center gap-2">
                         <button @click="handleUpdatePreset" :disabled="!isDirty || isLoadingPresets" class="btn-primary flex-grow justify-center">
-                             <span v-if="!isDirty">✔ Preset Matched</span>
+                             <span v-if="!isDirty">Preset Matched</span>
                              <span v-else>Update "{{ selectedPresetName }}"</span>
                         </button>
                         <button @click="handleDeletePreset" :disabled="isLoadingPresets" class="btn bg-red-50 text-red-700 border-red-200 hover:bg-red-100 px-2 btnDeleteSetting" title="Delete preset">
