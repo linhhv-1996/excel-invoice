@@ -18,7 +18,6 @@ const emit = defineEmits(['close', 'confirm']);
         <p class="text-sm text-slate-600">{{ message || 'Are you sure you want to proceed?' }}</p>
       </div>
       <div class="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 rounded-b-xl">
-        <button @click="$emit('close')" class="btn">Cancel</button>
         <button @click="$emit('confirm')" class="btn bg-red-600 text-white hover:bg-red-700 border-red-600">
           Confirm
         </button>

@@ -40,9 +40,6 @@ const fmtMoney = (n: number) => {
                     </table>
                 </div>
             </div>
-            <div class="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 rounded-b-xl">
-                <button @click="$emit('close')" class="btn">Close</button>
             </div>
-        </div>
     </div>
 </template>

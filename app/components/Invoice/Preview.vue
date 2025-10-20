@@ -4,6 +4,7 @@ import type { Invoice, Settings } from '~/composables/useInvoiceGenerator'
 const props = defineProps<{
   invoice: Invoice | null
   settings: Settings
+  hideFullscreenButton?: boolean // Thêm prop này
 }>()
 
 const emit = defineEmits(['fullscreen'])
@@ -29,7 +30,9 @@ const total = computed(() => subtotal.value + taxAmount.value)
             <h3 id="preview-title" class="text-[13px] font-semibold text-ink">
                 Preview ({{ invoice?.customer || 'No Selection' }})
             </h3>
-            <button @click="$emit('fullscreen')" id="fullscreen-preview-btn" class="text-slate-400 hover:text-slate-600" title="Full-screen preview"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-5 w-5"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75v4.5m0-4.5h-4.5m4.5 0L15 9m5.25 11.25v-4.5m0 4.5h-4.5m4.5 0L15 15" /></svg></button>
+            <button v-if="!hideFullscreenButton" @click="$emit('fullscreen')" id="fullscreen-preview-btn" class="text-slate-400 hover:text-slate-600" title="Full-screen preview">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-5 w-5"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75v4.5m0-4.5h-4.5m4.5 0L15 9m5.25 11.25v-4.5m0 4.5h-4.5m4.5 0L15 15" /></svg>
+            </button>
         </div>
 
         <div id="preview-content" class="rounded-xl border border-slate-200">
@@ -160,8 +163,6 @@ const total = computed(() => subtotal.value + taxAmount.value)
                         </div>
                      </div>
                  </div>
-
-
             </div>
             <div v-else class="text-center text-slate-500 py-10 text-sm">
                 Upload a file and map columns to see a preview.

@@ -1,25 +1,23 @@
 <script setup lang="ts">
-defineProps<{ show: boolean }>()
+defineProps<{ 
+  show: boolean,
+  title?: string 
+}>()
 const emit = defineEmits(['close'])
 
-const onBackdropClick = (event: MouseEvent) => {
-  if (event.target === event.currentTarget) emit('close')
-}
 </script>
 
 <template>
   <Transition name="fade">
-    <div v-if="show" class="modal open" @click="onBackdropClick">
-      <div class="card flex flex-col bg-white p-4" style="max-height: calc(100vh - 5rem); max-width: calc(100vw - 2rem)">
-        <div class="flex items-center justify-between flex-shrink-0">
+    <div v-if="show" class="modal-backdrop">
+      <div class="card flex flex-col bg-white w-full max-w-4xl rounded-xl overflow-hidden" style="max-height: calc(100vh - 5rem);">
+        <div class="flex items-center justify-between flex-shrink-0 border-b border-slate-200 px-4 py-3">
           <h4 class="text-sm font-bold">
-            Fullscreen Preview
+            {{ title || 'Preview' }}
           </h4>
-          <button class="btn btn-outline" @click="emit('close')">
-            Close
-          </button>
+          <button @click="emit('close')" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
         </div>
-        <div class="mt-3 overflow-auto w-full">
+        <div class="p-4 overflow-auto w-full">
           <slot />
         </div>
       </div>

@@ -29,19 +29,24 @@ const {
   invoices,
   firstInvoice,
   exportZip,
-  isProcessing, // Thêm isProcessing để vô hiệu hóa nút khi đang xử lý
+  isProcessing,
 } = useInvoiceGenerator()
 
-// Cập nhật freeMode dựa trên trạng thái isPro
 watch(isPro, (value) => {
   state.settings.freeMode = !value;
 }, { immediate: true });
-
 
 const showUpgradeModal = ref(false)
 const showDetailsModal = ref(false)
 const showWatermarkConfirmModal = ref(false)
 const selectedInvoiceForDetails = ref(null)
+const showFullscreenPreview = ref(false)
+
+function openFullscreenPreview() {
+  if (firstInvoice.value) {
+    showFullscreenPreview.value = true;
+  }
+}
 
 function viewDetails(invoice: any) {
   if (!invoice) return;
@@ -53,22 +58,17 @@ function handleFileTrigger() {
   triggerFileInput();
 }
 
-// *** LOGIC MỚI CHO NÚT EXPORT ***
 async function handleExportClick() {
     const invoicesToExport = invoices.value.length;
     if (invoicesToExport === 0) {
         showNotification('Please upload and map your file before exporting.');
         return;
     }
-
-    // Nếu là người dùng free, chỉ hiển thị modal nâng cấp
     if (!userProfile.value || userProfile.value.subscription_tier === 'free') {
         showWatermarkConfirmModal.value = true;
     }
-
-    // Nếu là người dùng gói Personal, kiểm tra giới hạn
     if (userProfile.value.subscription_tier === 'personal') {
-        isProcessing.value = true; // Bắt đầu xử lý
+        isProcessing.value = true;
         try {
             const result = await $fetch('/api/usage', {
                 method: 'POST',
@@ -76,20 +76,18 @@ async function handleExportClick() {
             });
 
             if (result.canExport) {
-                await exportZip(); // Nếu được phép, tiến hành export
+                await exportZip();
             } else {
                 showNotification(result.message || 'You have reached your monthly invoice limit.');
-                showUpgradeModal.value = true; // Mở modal để họ nâng cấp lên Pro
+                showUpgradeModal.value = true;
             }
         } catch (error: any) {
             showNotification(error.data?.message || 'Could not verify usage. Please try again.');
         } finally {
-            isProcessing.value = false; // Kết thúc xử lý
+            isProcessing.value = false;
         }
         return;
     }
-
-    // Nếu là người dùng Pro (không giới hạn), export luôn
     if (userProfile.value.subscription_tier === 'pro') {
         await exportZip();
     }
@@ -100,12 +98,10 @@ function handleConfirmExportWithWatermark() {
     showWatermarkConfirmModal.value = false;
 }
 
-// Xử lý khi người dùng muốn nâng cấp
 function handleTriggerUpgradeFromModal() {
     showWatermarkConfirmModal.value = false;
     showUpgradeModal.value = true;
 }
-
 </script>
 
 <template>
@@ -146,7 +142,11 @@ function handleTriggerUpgradeFromModal() {
 
       <aside class="relative md:col-span-2">
           <div class="sticky top-20 space-y-3 border px-4 py-2 rounded-lg">
-              <InvoicePreview :invoice="firstInvoice" :settings="state.settings" @fullscreen="viewDetails(firstInvoice)" />
+              <InvoicePreview 
+                :invoice="firstInvoice" 
+                :settings="state.settings" 
+                @fullscreen="openFullscreenPreview" 
+              />
                <div v-if="!isPro" class="rounded-xl border border-slate-200 bg-slate-50 p-3">
                   <div class="flex items-center justify-between"><label for="watermark" class="text-[13px] font-medium text-slate-700">Show Watermark</label><input type="checkbox" id="watermark" checked disabled class="h-4 w-4 rounded border-slate-300 text-slate-400 focus:ring-slate-400" /></div>
                   <p class="mt-1 text-[12px] text-slate-500">Upgrade to remove the "Excel → Invoice" watermark.</p>
@@ -156,15 +156,27 @@ function handleTriggerUpgradeFromModal() {
     </main>
 
     <AppFooter />
+
     <ModalsUpgradeModal :show="showUpgradeModal" @close="showUpgradeModal = false" />
     <ModalsReviewDetailsModal :show="showDetailsModal" :invoice="selectedInvoiceForDetails" @close="showDetailsModal = false"/>
-    
     <ModalsWatermarkConfirmModal 
         :show="showWatermarkConfirmModal" 
         @close="showWatermarkConfirmModal = false"
         @confirm="handleConfirmExportWithWatermark"
         @upgrade="handleTriggerUpgradeFromModal"
     />
+    
+    <AppModal 
+      :show="showFullscreenPreview" 
+      @close="showFullscreenPreview = false"
+      title="Fullscreen Preview"
+    >
+        <InvoicePreview 
+            :invoice="firstInvoice" 
+            :settings="state.settings" 
+            :hide-fullscreen-button="true"
+        />
+    </AppModal>
     
     <AppNotification />
   </div>
