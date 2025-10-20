@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue' // Thêm computed
-import { useInvoiceGenerator } from '~/composables/useInvoiceGenerator'
+import { computed, ref, watch, onMounted } from 'vue' // Thêm ref và watch nếu chưa có
+import { useInvoiceGenerator, type Invoice } from '~/composables/useInvoiceGenerator' // Import Invoice type
 import { useDb } from '~/composables/useDb'
 import { useExcelData } from '~/composables/useSharedState'
 import { useFileUploader } from '~/composables/useFileUploader';
@@ -15,13 +15,14 @@ const { isPro, userProfile } = useUserProfile();
 
 const isLoading = ref(true)
 
+// *** THÊM STATE ĐỂ LƯU INVOICE CHO PREVIEW ***
+const invoiceForPreview = ref<Invoice | null>(null)
+
 onMounted(async () => {
   const session = await loadSession()
   if (session && session.rawRows.length > 0) {
-    // Quan trọng: Gán giá trị cho useState refs
     rawRows.value = session.rawRows
     fileName.value = session.fileName
-     // Không cần gọi generateAndPreview ở đây nữa, watch(rawRows) trong useInvoiceGenerator sẽ xử lý
   }
   isLoading.value = false
 })
@@ -30,11 +31,10 @@ const {
   state,
   headers,
   invoices,
-  firstInvoice,
+  // firstInvoice, // Không cần firstInvoice nữa
   exportZip,
   isProcessing,
-  progress, // Thêm progress
-   // --- Lấy state và hàm xử lý selection ---
+  progress,
   selectedInvoiceIndices,
   toggleInvoiceSelection,
   selectAllInvoices,
@@ -42,7 +42,19 @@ const {
   areAllInvoicesSelected,
 } = useInvoiceGenerator()
 
-// Tính toán số lượng invoice đã chọn
+// *** CẬP NHẬT INVOICE PREVIEW KHI DANH SÁCH INVOICES THAY ĐỔI ***
+watch(invoices, (newInvoices) => {
+  if (newInvoices.length > 0) {
+    // Nếu invoice đang preview không còn trong danh sách mới, hoặc chưa có gì, chọn cái đầu tiên
+    if (!invoiceForPreview.value || !newInvoices.some(inv => inv._index === invoiceForPreview.value?._index)) {
+      invoiceForPreview.value = newInvoices[0];
+    }
+  } else {
+    invoiceForPreview.value = null; // Reset nếu không còn invoice nào
+  }
+}, { immediate: true });
+
+
 const selectedInvoiceCount = computed(() => selectedInvoiceIndices.value.size);
 
 
@@ -57,7 +69,7 @@ const selectedInvoiceForDetails = ref(null)
 const showFullscreenPreview = ref(false)
 
 function openFullscreenPreview() {
-  if (firstInvoice.value) { // Hoặc dùng invoiceForPreview nếu đã implement link preview
+  if (invoiceForPreview.value) {
     showFullscreenPreview.value = true;
   }
 }
@@ -72,32 +84,28 @@ function handleFileTrigger() {
   triggerFileInput();
 }
 
-// --- **CẬP NHẬT LOGIC EXPORT** ---
 async function handleExportClick() {
-    // const invoicesToExportCount = invoices.value.length; // Số tổng
-    const invoicesToExportCount = selectedInvoiceCount.value; // Số đã chọn
+    const invoicesToExportCount = selectedInvoiceCount.value;
 
     if (invoicesToExportCount === 0) {
         showNotification('Please select at least one invoice to export.');
         return;
     }
-    // Logic kiểm tra gói cước giữ nguyên
-     if (!isPro.value) { // Đơn giản hóa kiểm tra, nếu không phải Pro thì hiện confirm watermark
+     if (!isPro.value) {
         showWatermarkConfirmModal.value = true;
-        return; // Dừng lại chờ confirm
+        return;
     }
 
-    // Logic xử lý gói Personal (nếu có giới hạn)
     if (userProfile.value?.subscription_tier === 'personal') {
         isProcessing.value = true;
         try {
             const result = await $fetch<{ canExport: boolean; message?: string }>('/api/usage', {
                 method: 'POST',
-                body: { invoicesToExport: invoicesToExportCount } // Gửi số lượng đã chọn
+                body: { invoicesToExport: invoicesToExportCount }
             });
 
             if (result.canExport) {
-                await exportZip(); // Gọi exportZip không cần tham số
+                await exportZip();
             } else {
                 showNotification(result.message || 'You have reached your monthly invoice limit.');
                 showUpgradeModal.value = true;
@@ -107,20 +115,17 @@ async function handleExportClick() {
         } finally {
             isProcessing.value = false;
         }
-        return; // Dừng lại sau khi xử lý gói personal
+        return;
     }
 
-     // Logic gói Pro hoặc các gói không giới hạn khác
-    if (isPro.value) { // Gói Pro hoặc gói nào đó mà isPro = true
-        await exportZip(); // Gọi exportZip không cần tham số
+    if (isPro.value) {
+        await exportZip();
     }
-
 }
 
-// --- **CẬP NHẬT LOGIC CONFIRM WATERMARK** ---
 function handleConfirmExportWithWatermark() {
-    state.settings.freeMode = true; // Đảm bảo watermark được bật khi export từ free
-    exportZip(); // Gọi exportZip không cần tham số
+    state.settings.freeMode = true;
+    exportZip();
     showWatermarkConfirmModal.value = false;
 }
 
@@ -129,7 +134,6 @@ function handleTriggerUpgradeFromModal() {
     showUpgradeModal.value = true;
 }
 
-// --- **HÀM XỬ LÝ EVENT TỪ InvoiceList** ---
 const handleToggleSelect = (index: number) => {
     toggleInvoiceSelection(index);
 }
@@ -140,6 +144,11 @@ const handleToggleSelectAll = (isSelected: boolean) => {
     } else {
         deselectAllInvoices();
     }
+}
+
+// *** HÀM XỬ LÝ KHI CLICK VÀO DÒNG TRONG InvoiceList ***
+const handleInvoiceRowClick = (invoice: Invoice) => {
+    invoiceForPreview.value = invoice;
 }
 </script>
 
@@ -180,9 +189,12 @@ const handleToggleSelectAll = (isSelected: boolean) => {
             :invoices="invoices"
             :selected-indices="selectedInvoiceIndices"
             :are-all-selected="areAllInvoicesSelected"
-            :is-grouping-enabled="state.mapping.isGroupingEnabled" @view-details="viewDetails"
+            :is-grouping-enabled="state.mapping.isGroupingEnabled"
+            :active-invoice-index="invoiceForPreview?._index"
+            @view-details="viewDetails"
             @toggle-select="handleToggleSelect"
             @toggle-select-all="handleToggleSelectAll"
+            @row-click="handleInvoiceRowClick"
         />
         <InvoiceSettingsCard
           v-model:settings="state.settings"
@@ -193,7 +205,7 @@ const handleToggleSelectAll = (isSelected: boolean) => {
       <aside class="relative md:col-span-2">
            <div class="sticky top-20 space-y-3">
               <InvoicePreview
-                :invoice="firstInvoice"
+                :invoice="invoiceForPreview"
                 :settings="state.settings"
                 @fullscreen="openFullscreenPreview"
               />
@@ -225,7 +237,7 @@ const handleToggleSelectAll = (isSelected: boolean) => {
       title="Fullscreen Preview"
     >
         <InvoicePreview
-            :invoice="firstInvoice"
+            :invoice="invoiceForPreview"
             :settings="state.settings"
             :hide-fullscreen-button="true"
         />

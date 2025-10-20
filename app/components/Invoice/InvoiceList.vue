@@ -3,18 +3,19 @@
 import { computed } from 'vue'
 import type { Invoice } from '~/composables/useInvoiceGenerator'
 
-// *** THÊM isGroupingEnabled VÀO PROPS ***
 const props = defineProps<{
   invoices: Invoice[]
   selectedIndices: Set<number>
   areAllSelected: boolean
-  isGroupingEnabled: boolean // <--- THÊM PROP NÀY
+  isGroupingEnabled: boolean
+  activeInvoiceIndex?: number | null | undefined
 }>()
 
 const emit = defineEmits([
     'viewDetails',
     'toggleSelect',
-    'toggleSelectAll'
+    'toggleSelectAll',
+    'rowClick'
 ])
 
 const fmtMoney = (n: number) => {
@@ -44,6 +45,11 @@ const isHeaderChecked = computed({
 const isHeaderIndeterminate = computed(() =>
     props.selectedIndices.size > 0 && props.selectedIndices.size < props.invoices.length
 );
+
+// *** HÀM XỬ LÝ KHI CLICK VÀO DÒNG ***
+const onRowClick = (invoice: Invoice) => {
+    emit('rowClick', invoice);
+}
 
 </script>
 <template>
@@ -77,12 +83,19 @@ const isHeaderIndeterminate = computed(() =>
                         </tr>
                     </thead>
                     <tbody v-if="invoices.length > 0" class="divide-y divide-slate-200">
-                        <tr v-for="(invoice) in invoices" :key="invoice._index" :class="{'hover:bg-slate-50': true}">
+                        <tr v-for="(invoice) in invoices"
+                            :key="invoice._index"
+                            @click="onRowClick(invoice)"
+                            class="cursor-pointer"
+                            :class="{
+                                'hover:bg-slate-50': invoice._index !== activeInvoiceIndex,
+                                'bg-indigo-50 hover:bg-indigo-100': invoice._index === activeInvoiceIndex
+                            }">
                             <td class="px-3 py-2">
                                 <input
                                     type="checkbox"
                                     :checked="selectedIndices.has(invoice._index!)"
-                                    @change="handleRowSelectChange(invoice._index, $event)"
+                                    @change.stop="handleRowSelectChange(invoice._index, $event)"
                                     class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                                 />
                             </td>
@@ -90,8 +103,7 @@ const isHeaderIndeterminate = computed(() =>
                             <td class="px-3 py-2">{{ invoice.lines.length }}</td>
                             <td class="px-3 py-2 text-right">{{ fmtMoney(invoice.lines.reduce((acc, line) => acc + line.total, 0)) }}</td>
                             <td class="px-3 py-2 text-center">
-                                <button class="text-slate-500 hover:text-indigo-600 view-details-btn" @click="$emit('viewDetails', invoice)">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5"><path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clip-rule="evenodd" /></svg>
+                                <button class="text-slate-500 hover:text-indigo-600 view-details-btn" @click.stop="$emit('viewDetails', invoice)"> <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5"><path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clip-rule="evenodd" /></svg>
                                 </button>
                             </td>
                         </tr>
