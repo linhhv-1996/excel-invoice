@@ -73,7 +73,7 @@ const handleGoogleLogin = async () => {
           <div class="relative flex justify-center text-sm"><span class="bg-white px-2 text-slate-500">Or with email</span></div>
         </div>
         
-        <form @submit.prevent="handleLogin">
+        <form id="loginForm" @submit.prevent="handleLogin">
           <div>
             <label for="email" class="text-sm font-medium">Email address</label>
             <input id="email" v-model="email" type="email" class="form-input mt-1" placeholder="you@example.com" :disabled="loading || loadingGoogle"/>

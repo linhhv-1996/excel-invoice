@@ -69,6 +69,7 @@ const onRowClick = (invoice: Invoice) => {
                         <tr>
                             <th class="w-10 px-3 py-2 text-left">
                                 <input
+                                    name="selectAll"
                                     type="checkbox"
                                     :checked="isHeaderChecked"
                                     :indeterminate="isHeaderIndeterminate"
@@ -94,6 +95,7 @@ const onRowClick = (invoice: Invoice) => {
                             }">
                             <td class="px-3 py-2">
                                 <input
+                                    name="selectItem"
                                     type="checkbox"
                                     :checked="selectedIndices.has(invoice._index!)"
                                     @change.stop="handleRowSelectChange(invoice._index, $event)"

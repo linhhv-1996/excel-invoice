@@ -41,6 +41,7 @@ provide('showConfirm', showConfirm);
   <div>
     <NuxtPage />
     <input
+      name="uploaFile"
       ref="fileInput"
       type="file"
       accept=".xlsx,.xls,.csv"

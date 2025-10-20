@@ -192,7 +192,7 @@ const clearSelectedPreset = () => {
                     </div>
 
                     <div v-if="presets.length > 0 || isLoadingPresets" class="flex items-center gap-2 mb-3">
-                        <select v-model="selectedPresetId" :disabled="isLoadingPresets" class="form-select flex-grow cursor-pointer !mt-0">
+                        <select name="sltLoadingPreset" v-model="selectedPresetId" :disabled="isLoadingPresets" class="form-select flex-grow cursor-pointer !mt-0">
                             <option :value="null">{{ isLoadingPresets ? 'Loading presets...' : 'Load a preset...' }}</option>
                             <option v-for="p in presets" :key="p.id" :value="p.id">
                                 {{ p.profile_name }}
@@ -212,7 +212,7 @@ const clearSelectedPreset = () => {
                     </div>
 
                     <div v-if="!selectedPresetId || presets.length === 0" class="grid grid-cols-3 gap-2 border-t border-slate-200 pt-3 mt-3">
-                        <input type="text" placeholder="Save current settings as new preset..." v-model="newPresetName" :disabled="isLoadingPresets" class="form-input col-span-2 !mt-0" />
+                        <input name="newPresentName" type="text" placeholder="Save current settings as new preset..." v-model="newPresetName" :disabled="isLoadingPresets" class="form-input col-span-2 !mt-0" />
                         <button @click="handleSaveNewPreset" :disabled="!newPresetName || isLoadingPresets" class="btn-primary w-full">Save New</button>
                     </div>
                 </div>
@@ -224,28 +224,29 @@ const clearSelectedPreset = () => {
 
                     <div class="grid grid-cols-2 gap-2">
                         <label class="col-span-2 md:col-span-1"><div class="text-[12px] text-slate-500">Company Name</div>
-                           <input v-model="localSettings.cName" class="form-input" />
+                           <input name="cName" v-model="localSettings.cName" class="form-input" />
                         </label>
                         <label class="col-span-2 md:col-span-1"><div class="text-[12px] text-slate-500">Contact Email</div>
-                           <input v-model="localSettings.cEmail" type="email" class="form-input"/>
+                           <input name="cEmail" v-model="localSettings.cEmail" type="email" class="form-input"/>
                         </label>
                     </div>
 
                      <label class="col-span-2">
                         <div class="mt-1 text-[12px] text-slate-500">Sender Address</div>
-                        <input v-model="localSettings.cAddr" class="form-input" placeholder="123 Your Street, City, Country"/>
+                        <input nonce="cAddr" v-model="localSettings.cAddr" class="form-input" placeholder="123 Your Street, City, Country"/>
                      </label>
 
                      <div class="grid grid-cols-2 gap-2">
                           <label class="col-span-2 md:col-span-1">
                               <div class="text-[12px] text-slate-500">Tax ID / VAT Number (Optional)</div>
-                              <input v-model="localSettings.cTax" class="form-input" placeholder="e.g., VAT DE123456789"/>
+                              <input name="cTax" v-model="localSettings.cTax" class="form-input" placeholder="e.g., VAT DE123456789"/>
                           </label>
 
                           <div class="col-span-2 md:col-span-1">
                                 <div class="text-[12px] text-slate-500">Your Logo</div>
                                 <div class="flex items-center gap-2">
                                     <input
+                                        name="logo"
                                         type="file"
                                         accept="image/png, image/jpeg, image/svg+xml"
                                         @change="handleLogoChange"

@@ -222,7 +222,7 @@ const handleInvoiceRowClick = (invoice: Invoice) => {
                <div v-if="!isPro" class="rounded-xl border border-slate-200 bg-slate-50 p-3">
                   <div class="flex items-center justify-between">
                       <label class="text-[13px] font-medium text-slate-700">Show Watermark</label>
-                      <input type="checkbox" checked disabled class="h-4 w-4 rounded border-slate-300 text-slate-400 focus:ring-slate-400" />
+                      <input name="waterMark" type="checkbox" checked disabled class="h-4 w-4 rounded border-slate-300 text-slate-400 focus:ring-slate-400" />
                   </div>
                   <p class="mt-1 text-[12px] text-slate-500">Upgrade to Pro to remove the watermark.</p>
               </div>
