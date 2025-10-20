@@ -9,6 +9,7 @@ import { useNotification } from '~/composables/useNotification'
 const props = defineProps<{ settings: Settings }>()
 const emit = defineEmits(['update:settings', 'openUpgradeModal'])
 
+// Sử dụng computed để v-model hoạt động đúng cách
 const localSettings = computed({
   get: () => props.settings,
   set: (value) => emit('update:settings', value),
@@ -23,7 +24,16 @@ const { showNotification } = useNotification()
 const newPresetName = ref('')
 const selectedPresetId = ref<number | null>(null)
 const isDirty = ref(false)
-let isProgrammaticChange = false // Flag để tránh race condition
+let originalLoadedPresetData = ref<string>('') // Lưu trạng thái gốc dưới dạng JSON string
+let isProgrammaticChange = false // Flag để tránh cập nhật isDirty khi load preset
+
+// --- Computed property để lấy tên preset đang chọn ---
+const selectedPresetName = computed(() => {
+    if (!selectedPresetId.value) return '';
+    const selected = presets.value.find(p => p.id === selectedPresetId.value);
+    return selected ? selected.profile_name : '';
+});
+
 
 // --- Lifecycle & Watchers ---
 onMounted(() => {
@@ -33,53 +43,38 @@ watch(isPro, (isUserPro) => {
   if (isUserPro && presets.value.length === 0) fetchPresets()
 })
 
+// Tự động load preset khi người dùng chọn từ dropdown
 watch(selectedPresetId, (newId) => {
   if (!newId) {
-    isDirty.value = false;
+    originalLoadedPresetData.value = ''
+    isDirty.value = false; // Reset dirty state khi bỏ chọn
     return;
   }
-  proFeatureGuard(() => {
-    const preset = presets.value.find(p => p.id === newId);
-    if (preset) {
-      isProgrammaticChange = true;
-      Object.assign(localSettings.value, preset.profile_data);
-      showNotification(`Preset "${preset.profile_name}" loaded!`);
-      isDirty.value = false;
-      nextTick(() => {
-        isProgrammaticChange = false;
-      });
-    }
-  });
+  // Không cần guard ở đây vì dropdown chỉ hiện đầy đủ cho Pro
+  const preset = presets.value.find(p => p.id === newId);
+  if (preset) {
+    isProgrammaticChange = true; // Đánh dấu là thay đổi do code
+    // Merge preset data vào settings hiện tại, ghi đè các trường có trong preset
+    const updatedSettings = { ...localSettings.value, ...preset.profile_data };
+    emit('update:settings', updatedSettings); // Phát sự kiện update
+    originalLoadedPresetData.value = JSON.stringify(getPresetDataFromSettings(updatedSettings)); // Lưu trạng thái gốc mới
+    showNotification(`Preset "${preset.profile_name}" loaded!`);
+    isDirty.value = false; // Reset dirty sau khi load
+    nextTick(() => {
+      isProgrammaticChange = false; // Bỏ đánh dấu sau khi cập nhật xong
+    });
+  }
 });
 
-// *** LOGIC ĐÃ ĐƯỢC SỬA LỖI HOÀN CHỈNH ***
+// Theo dõi sự thay đổi của settings để bật/tắt nút Update
 watch(localSettings, (newSettings) => {
-    if (isProgrammaticChange) return;
+    if (isProgrammaticChange) return; // Bỏ qua nếu thay đổi do code (load preset)
 
-    if (selectedPresetId.value) {
-        const selectedPreset = presets.value.find(p => p.id === selectedPresetId.value);
-        if (selectedPreset) {
-            // Helper để tạo một object preset data chuẩn hóa
-            const normalize = (s: Partial<Settings>): InvoicePresetData => ({
-                cName: s.cName || '',
-                cEmail: s.cEmail || '',
-                cAddr: s.cAddr || '',
-                cTax: s.cTax || '',
-                template: s.template || 'modern',
-                fileNamePattern: s.fileNamePattern || '',
-                startInvoiceNumber: s.startInvoiceNumber || '',
-                currency: s.currency || 'USD',
-                locale: s.locale || 'en-US',
-                taxPercent: s.taxPercent || 0,
-            });
-
-            const currentData = normalize(newSettings);
-            const originalData = normalize(selectedPreset.profile_data);
-
-            isDirty.value = JSON.stringify(currentData) !== JSON.stringify(originalData);
-        }
+    if (originalLoadedPresetData.value) { // Chỉ kiểm tra dirty khi có preset được load
+        const currentDataString = JSON.stringify(getPresetDataFromSettings(newSettings));
+        isDirty.value = currentDataString !== originalLoadedPresetData.value;
     } else {
-        isDirty.value = false;
+        isDirty.value = false; // Không dirty nếu không có preset nào được load
     }
 }, { deep: true });
 
@@ -94,34 +89,57 @@ const proFeatureGuard = (action: Function) => {
   return true;
 }
 
-const getPresetDataFromSettings = (): InvoicePresetData => {
-    const { freeMode, logo, ...rest } = localSettings.value;
-    return rest;
+// Helper function để lấy dữ liệu cần lưu/so sánh từ object Settings
+const getPresetDataFromSettings = (settingsObj: Settings = localSettings.value): InvoicePresetData => {
+    const { freeMode, logo, ...rest } = settingsObj; // Loại bỏ freeMode và logo
+    // Đảm bảo các giá trị không phải là undefined hoặc null, thay bằng giá trị mặc định nếu cần
+    return {
+        cName: rest.cName || '',
+        cEmail: rest.cEmail || '',
+        cAddr: rest.cAddr || '',
+        cTax: rest.cTax || '', // Thêm cTax nếu có
+        template: rest.template || 'modern',
+        fileNamePattern: rest.fileNamePattern || '',
+        startInvoiceNumber: rest.startInvoiceNumber || '',
+        currency: rest.currency || 'USD',
+        locale: rest.locale || 'en-US',
+        taxPercent: rest.taxPercent || 0,
+    };
 }
 
+
 const handleSaveNewPreset = async () => {
-    if (!proFeatureGuard(() => {})) return;
-    
-    const dataToSave = getPresetDataFromSettings();
-    const savedPreset = await savePreset(newPresetName.value, dataToSave);
-    
-    if(savedPreset) {
-        newPresetName.value = ''; 
-        selectedPresetId.value = savedPreset.id; 
-    }
+    if (!proFeatureGuard(async () => {
+        const dataToSave = getPresetDataFromSettings();
+        const savedPreset = await savePreset(newPresetName.value.trim(), dataToSave);
+
+        if (savedPreset) {
+            newPresetName.value = '';
+            // Tự động chọn preset vừa lưu
+            selectedPresetId.value = savedPreset.id;
+             // Cập nhật lại originalLoadedPresetData sau khi lưu thành công
+            originalLoadedPresetData.value = JSON.stringify(savedPreset.profile_data);
+            isDirty.value = false; // Reset dirty state
+        }
+    })) return;
 }
 
 const handleUpdatePreset = async () => {
     const preset = presets.value.find(p => p.id === selectedPresetId.value);
     if (!preset) return;
-    if (!proFeatureGuard(() => {})) return;
-
-    const dataToUpdate = getPresetDataFromSettings();
-    const updated = await updatePreset(preset.id, dataToUpdate);
-    if(updated) {
-        isDirty.value = false;
-    }
+    if (!proFeatureGuard(async () => {
+        const dataToUpdate = getPresetDataFromSettings();
+        const updated = await updatePreset(preset.id, dataToUpdate);
+        if (updated) {
+            originalLoadedPresetData.value = JSON.stringify(dataToUpdate); // Cập nhật trạng thái gốc
+            isDirty.value = false; // Reset dirty state
+             // Cập nhật lại preset trong danh sách local để tên không bị lỗi nếu đổi tên (mặc dù hiện tại không cho đổi tên)
+            const index = presets.value.findIndex(p => p.id === updated.id);
+            if (index > -1) presets.value[index] = updated;
+        }
+    })) return;
 }
+
 
 const handleDeletePreset = () => {
     const preset = presets.value.find(p => p.id === selectedPresetId.value);
@@ -130,18 +148,24 @@ const handleDeletePreset = () => {
       'Delete Preset',
       `Are you sure you want to delete the "${preset.profile_name}" preset? This action cannot be undone.`,
       () => {
-        if (!proFeatureGuard(() => {})) return;
-        deletePreset(preset.id).then(success => {
-            if(success) {
-                selectedPresetId.value = null;
-                Object.assign(localSettings.value, {
-                    cName: 'Your Company', cEmail: 'you@example.com', cAddr: '123 Your Street, City',
-                    template: 'modern', fileNamePattern: 'invoice_{client}_{date}', startInvoiceNumber: 'INV-001',
-                    currency: 'USD', locale: 'en-US', taxPercent: 10
-                });
+        if (!proFeatureGuard(async () => {
+            const success = await deletePreset(preset.id);
+            if (success) {
+                selectedPresetId.value = null; // Bỏ chọn
+                originalLoadedPresetData.value = ''; // Xóa trạng thái gốc
+                isDirty.value = false; // Reset dirty state
+                // Optionally reset settings to default
+                // emit('update:settings', { ...defaultSettings });
             }
-        });
+        })) return;
     });
+}
+
+// Hàm để clear lựa chọn preset
+const clearSelectedPreset = () => {
+    selectedPresetId.value = null;
+    originalLoadedPresetData.value = '';
+    isDirty.value = false;
 }
 </script>
 
@@ -154,36 +178,46 @@ const handleDeletePreset = () => {
                     Invoice Presets <span class="pro-feature-badge ml-2">Pro</span>
                 </h3>
 
-                <div v-if="isPro && presets.length === 0 && !isLoadingPresets" class="bg-slate-50 text-center p-4 rounded-md text-sm text-slate-600">
-                    <p>You haven't saved any presets yet.</p>
-                    <p class="mt-1">Fill in all settings below, then save them as a preset for quick access!</p>
+                <div v-if="!isPro" class="bg-slate-50 text-center p-4 rounded-md text-sm text-slate-600 border border-slate-200">
+                    <p class="font-medium">⚙️ Save and reuse your Invoice Settings with Presets!</p>
+                    <p class="mt-1 text-xs">A time-saving feature available for Pro users.</p>
+                    <button @click="$emit('openUpgradeModal')" class="btn-pro mt-3 text-xs !py-1">✨ Upgrade to Pro</button>
                 </div>
 
-                <div v-else class="flex items-center gap-2">
-                    <select v-model="selectedPresetId" :disabled="!isPro || isLoadingPresets" class="form-select-pro flex-grow cursor-pointer !mt-0">
-                        <option :value="null">{{ isPro ? 'Load a preset...' : 'Feature available for Pro' }}</option>
-                        <option v-for="p in presets" :key="p.id" :value="p.id">{{ p.profile_name }}</option>
-                    </select>
-                    
-                    <template v-if="selectedPresetId">
-                        <button @click="handleUpdatePreset" :disabled="!isDirty || isLoadingPresets" class="btn-primary">
-                            {{ isDirty ? 'Update' : 'Saved' }}
+                <div v-else>
+                     <div v-if="presets.length === 0 && !isLoadingPresets" class="bg-slate-50 text-center p-4 rounded-md text-sm text-slate-600">
+                        <p>You haven't saved any settings presets yet.</p>
+                        <p class="mt-1">Fill in the settings below, then save them as a preset for quick access!</p>
+                    </div>
+
+                    <div v-if="presets.length > 0 || isLoadingPresets" class="flex items-center gap-2 mb-3">
+                        <select v-model="selectedPresetId" :disabled="isLoadingPresets" class="form-select flex-grow cursor-pointer !mt-0">
+                            <option :value="null">{{ isLoadingPresets ? 'Loading presets...' : 'Load a preset...' }}</option>
+                            <option v-for="p in presets" :key="p.id" :value="p.id">
+                                {{ p.profile_name }}
+                                <span v-if="selectedPresetId === p.id && !isDirty">✔</span>
+                            </option>
+                        </select>
+                         <button v-if="selectedPresetId" @click="clearSelectedPreset" class="btn text-xs" title="Clear selection">Clear</button>
+                    </div>
+
+                     <div v-if="selectedPresetId" class="flex items-center gap-2">
+                        <button @click="handleUpdatePreset" :disabled="!isDirty || isLoadingPresets" class="btn-primary flex-grow justify-center">
+                             <span v-if="!isDirty">✔ Preset Matched</span>
+                             <span v-else>Update "{{ selectedPresetName }}"</span>
                         </button>
                         <button @click="handleDeletePreset" :disabled="isLoadingPresets" class="btn bg-red-50 text-red-700 border-red-200 hover:bg-red-100 px-2 btnDeleteSetting" title="Delete preset">
-                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6"><path fill-rule="evenodd" d="M9 2a2 2 0 0 0-2 2v2H3v2h1.1l1.2 13.4A2 2 0 0 0 7.3 24h9.4a2 2 0 0 0 2-2.6L19.9 8H21V6h-4V4a2 2 0 0 0-2-2H9Zm2 5v12a1 1 0 1 1-2 0V7h2Zm4 0v12a1 1 0 1 1-2 0V7h2Z" clip-rule="evenodd"></path></svg>
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5"><path fill-rule="evenodd" d="M16.5 4.478v.227a48.816 48.816 0 013.878.512.75.75 0 11-.256 1.478l-.209-.035-1.005 13.07a3 3 0 01-2.991 2.77H8.084a3 3 0 01-2.991-2.77L4.087 6.66l-.209.035a.75.75 0 01-.256-1.478A48.567 48.567 0 017.5 4.705v-.227c0-1.564 1.213-2.9 2.816-2.951a52.662 52.662 0 013.369 0c1.603.051 2.816 1.387 2.816 2.951zm-6.136-1.452a51.196 51.196 0 013.273 0C14.39 3.05 15 3.684 15 4.478v.113a49.488 49.488 0 00-6 0v-.113c0-.794.609-1.428 1.364-1.452zm-.389 6.073a.75.75 0 01.389.676v8.178a.75.75 0 01-1.5 0v-8.178a.75.75 0 011.111-.676zm4.5 0a.75.75 0 01.676-.389h.001a.75.75 0 01.389.676v8.178a.75.75 0 01-1.5 0v-8.178a.75.75 0 01.75-.75z" clip-rule="evenodd" /></svg>
                         </button>
-                    </template>
-                </div>
-                
-                <div class="border-t border-slate-200 my-2"></div>
+                    </div>
 
-                <div class="grid grid-cols-3 gap-2">
-                    <input type="text" placeholder="Save current settings as new preset..." v-model="newPresetName" :disabled="!isPro || isLoadingPresets" class="form-input col-span-2 !mt-0" />
-                    <button @click="handleSaveNewPreset" :disabled="!newPresetName || isLoadingPresets" class="btn-primary w-full">Save New</button>
+                    <div v-if="!selectedPresetId || presets.length === 0" class="grid grid-cols-3 gap-2 border-t border-slate-200 pt-3 mt-3">
+                        <input type="text" placeholder="Save current settings as new preset..." v-model="newPresetName" :disabled="isLoadingPresets" class="form-input col-span-2 !mt-0" />
+                        <button @click="handleSaveNewPreset" :disabled="!newPresetName || isLoadingPresets" class="btn-primary w-full">Save New</button>
+                    </div>
                 </div>
             </div>
-
-            <div class="grid grid-cols-2 gap-x-4 gap-y-3">
+             <div class="grid grid-cols-2 gap-x-4 gap-y-3">
                 <div class="col-span-2 space-y-2">
                     <h3 class="text-[12px] font-medium uppercase tracking-wide text-slate-500">Sender Information (Your Info)</h3>
                     <div class="grid grid-cols-2 gap-2">
@@ -194,9 +228,16 @@ const handleDeletePreset = () => {
                            <input v-model="localSettings.cEmail" class="form-input"/>
                         </label>
                     </div>
-                    <label><div class="text-[12px] text-slate-500">Sender Address</div>
-                        <textarea v-model="localSettings.cAddr" class="form-input" rows="2"></textarea>
-                    </label>
+                     <div class="grid grid-cols-2 gap-2">
+                          <label class="col-span-2 md:col-span-1">
+                              <div class="text-[12px] text-slate-500">Sender Address</div>
+                              <textarea v-model="localSettings.cAddr" class="form-input" rows="2"></textarea>
+                          </label>
+                           <label class="col-span-2 md:col-span-1">
+                              <div class="text-[12px] text-slate-500">Tax ID / VAT Number (Optional)</div>
+                              <input v-model="localSettings.cTax" class="form-input" placeholder="e.g., VAT DE123456789"/>
+                          </label>
+                     </div>
                 </div>
                  <div class="col-span-2 space-y-2 pt-3 mt-3 border-t border-slate-200">
                     <h3 class="text-[12px] font-medium uppercase tracking-wide text-slate-500">Template</h3>
@@ -222,7 +263,7 @@ const handleDeletePreset = () => {
                         <label><div class="text-[12px] text-slate-500">Starting Invoice Number</div><input v-model="localSettings.startInvoiceNumber" class="form-input" /></label>
                         <label><div class="text-[12px] text-slate-500">Currency</div><select v-model="localSettings.currency" class="form-select"><option>USD</option><option>EUR</option><option>VND</option></select></label>
                         <label><div class="text-[12px] text-slate-500">Locale</div><select v-model="localSettings.locale" class="form-select"><option>en-US</option><option>en-GB</option><option>vi-VN</option></select></label>
-                        <label class="col-span-2"><div class="text-[12px] text-slate-500">Global Tax % (Optional)</div><input v-model.number="localSettings.taxPercent" type="number" class="form-input" placeholder="e.g., 10" /></label>
+                        <label class="col-span-2"><div class="text-[12px] text-slate-500">Global Tax % (Optional)</div><input v-model.number="localSettings.taxPercent" type="number" step="0.01" class="form-input" placeholder="e.g., 10" /></label>
                     </div>
                 </div>
             </div>

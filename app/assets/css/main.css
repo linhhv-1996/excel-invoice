@@ -14,10 +14,10 @@ html, body { height: 100%; }
 .pro-feature-badge { @apply ml-1.5 text-[10px] font-bold uppercase text-indigo-500; }
 .pro-feature-lock { @apply ml-1.5 text-indigo-500; }
 
-/* Form input/select styles */
-.form-input { @apply mt-1 w-full rounded-md border border-slate-300 px-2 py-1 text-[13px]; }
-.form-select { @apply mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-[13px] disabled:bg-slate-100; }
-.form-select-pro { @apply mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-[13px] text-slate-500; }
+/* Form input/select styles - CẬP NHẬT py-1 thành py-1.5 */
+.form-input { @apply mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-[13px]; } /* Thay đổi ở đây */
+.form-select { @apply mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-[13px] disabled:bg-slate-100; } /* Thay đổi ở đây */
+.form-select-pro { @apply mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-[13px] text-slate-500; } /* Thay đổi ở đây */
 
 /* Styles from lp.html */
 .nb-card{border:1px solid rgba(15,23,42,0.08); border-radius:1rem; background:#fff}

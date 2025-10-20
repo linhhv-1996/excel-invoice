@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, inject } from 'vue'
+import { ref, onMounted, watch, inject, computed } from 'vue' // Thêm computed
 import type { Mapping } from '~/composables/useInvoiceGenerator'
 import { useUserProfile } from '~/composables/useUserProfile'
 import { useNotification } from '~/composables/useNotification'
@@ -22,10 +22,15 @@ const { templates, isLoading: isLoadingTemplates, fetchTemplates, saveTemplate, 
 
 const newTemplateName = ref('')
 const selectedTemplateId = ref<number | null>(null)
-
-// Template gốc được tải để so sánh thay đổi
-const originalLoadedTemplateConfig = ref<string>('') 
+const originalLoadedTemplateConfig = ref<string>('')
 const isMappingDirty = ref(false)
+
+// --- Computed property để lấy tên template đang chọn ---
+const selectedTemplateName = computed(() => {
+  if (!selectedTemplateId.value) return '';
+  const selected = templates.value.find(t => t.id === selectedTemplateId.value);
+  return selected ? selected.template_name : '';
+});
 
 // --- Lifecycle & Watchers ---
 onMounted(() => {
@@ -35,33 +40,29 @@ watch(isPro, (isUserPro) => {
   if (isUserPro && templates.value.length === 0) fetchTemplates()
 })
 
-// Tự động load template khi người dùng chọn từ dropdown
 watch(selectedTemplateId, (newId) => {
   if (!newId) {
     originalLoadedTemplateConfig.value = ''
+    isMappingDirty.value = false; // Reset dirty state khi bỏ chọn
     return
   }
-  proFeatureGuard(() => {
-    const selected = templates.value.find(t => t.id === newId)
-    if (selected) {
-      // Deep clone mapping config để tránh thay đổi ngoài ý muốn
-      const newMapping = { ...props.mapping, ...JSON.parse(JSON.stringify(selected.mapping_config)) }
-      emit('update:mapping', newMapping)
-      
-      // Lưu lại bản gốc để so sánh
-      originalLoadedTemplateConfig.value = JSON.stringify(newMapping)
-      isMappingDirty.value = false
-      showNotification(`Preset "${selected.template_name}" loaded!`)
-    }
-  })
+  // Không cần gọi proFeatureGuard ở đây vì dropdown chỉ hiện đầy đủ cho Pro
+  const selected = templates.value.find(t => t.id === newId)
+  if (selected) {
+    const newMapping = { ...props.mapping, ...JSON.parse(JSON.stringify(selected.mapping_config)) }
+    emit('update:mapping', newMapping)
+    originalLoadedTemplateConfig.value = JSON.stringify(newMapping)
+    isMappingDirty.value = false
+    showNotification(`Preset "${selected.template_name}" loaded!`)
+  }
 })
 
-// Theo dõi sự thay đổi của mapping so với template đã load để bật/tắt nút Update
 watch(() => props.mapping, (newMapping) => {
   if (originalLoadedTemplateConfig.value) {
     const currentConfig = JSON.stringify(newMapping)
     isMappingDirty.value = originalLoadedTemplateConfig.value !== currentConfig
   } else {
+    // Nếu không có template nào được load (selectedTemplateId là null), không coi là dirty
     isMappingDirty.value = false
   }
 }, { deep: true })
@@ -77,37 +78,39 @@ const proFeatureGuard = (action: Function) => {
     emit('openUpgradeModal');
     return false;
   }
+  // Chỉ gọi action nếu đã qua guard
   action();
   return true;
 }
 
 const handleSaveNewTemplate = async () => {
-  if (!proFeatureGuard(() => {})) return;
-  const success = await saveTemplate(newTemplateName.value, props.mapping)
-  if (success) {
-    showNotification(`Preset "${newTemplateName.value}" saved!`);
-    // Tự động chọn preset vừa lưu
-    const newSavedTemplate = templates.value.find(t => t.template_name === newTemplateName.value.trim());
-    if (newSavedTemplate) {
-      selectedTemplateId.value = newSavedTemplate.id;
-    }
-    newTemplateName.value = ''
-  }
+    // Guard đã được tích hợp trong proFeatureGuard
+    if (!proFeatureGuard(async () => {
+        const success = await saveTemplate(newTemplateName.value, props.mapping);
+        if (success) {
+            showNotification(`Preset "${newTemplateName.value}" saved!`);
+            const newSavedTemplate = templates.value.find(t => t.template_name === newTemplateName.value.trim());
+            if (newSavedTemplate) {
+                selectedTemplateId.value = newSavedTemplate.id; // Tự động chọn preset vừa lưu
+            }
+            newTemplateName.value = ''; // Xóa input sau khi lưu thành công
+        }
+    })) return;
 }
+
 
 const handleUpdateTemplate = async () => {
   const selected = templates.value.find(t => t.id === selectedTemplateId.value);
   if (!selected) return;
-  
-  if (!proFeatureGuard(() => {})) return;
 
-  const success = await saveTemplate(selected.template_name, props.mapping);
-  if (success) {
-    // Cập nhật lại bản gốc để so sánh
-    originalLoadedTemplateConfig.value = JSON.stringify(props.mapping);
-    isMappingDirty.value = false;
-    showNotification(`Preset "${selected.template_name}" updated!`);
-  }
+  if (!proFeatureGuard(async () => {
+      const success = await saveTemplate(selected.template_name, props.mapping); // Dùng lại saveTemplate vì nó có logic upsert
+      if (success) {
+          originalLoadedTemplateConfig.value = JSON.stringify(props.mapping);
+          isMappingDirty.value = false;
+          showNotification(`Preset "${selected.template_name}" updated!`);
+      }
+  })) return;
 }
 
 const handleDeleteTemplate = async () => {
@@ -118,15 +121,24 @@ const handleDeleteTemplate = async () => {
     'Delete Preset',
     `Are you sure you want to delete the "${selected.template_name}" preset? This action cannot be undone.`,
     () => {
-      if (!proFeatureGuard(() => {})) return;
-      
-      deleteTemplate(selected.id).then(success => {
-        if (success) {
-          selectedTemplateId.value = null; // Bỏ chọn khỏi dropdown
-        }
-      });
+        // Guard được gọi bên trong callback của confirm
+        if (!proFeatureGuard(async () => {
+            const success = await deleteTemplate(selected.id);
+            if (success) {
+                selectedTemplateId.value = null; // Bỏ chọn khỏi dropdown
+                originalLoadedTemplateConfig.value = ''; // Xóa config gốc đã lưu
+                isMappingDirty.value = false; // Reset dirty state
+            }
+        })) return;
     }
   );
+}
+
+// Hàm để clear lựa chọn template
+const clearSelectedTemplate = () => {
+    selectedTemplateId.value = null;
+    originalLoadedTemplateConfig.value = '';
+    isMappingDirty.value = false;
 }
 </script>
 
@@ -136,45 +148,52 @@ const handleDeleteTemplate = async () => {
       <h2 class="text-[13px] font-semibold text-ink">1. Data Mapping</h2>
     </div>
     <div class="p-3 pt-0">
-      
+
       <div class="mb-4 rounded-md border border-slate-200 p-3 space-y-3">
-        <div>
-          <h3 class="text-[12px] font-medium uppercase tracking-wide text-slate-500 flex items-center">
-            Preset Mappings
-            <span class="pro-feature-badge ml-2">Pro</span>
-          </h3>
+        <h3 class="text-[12px] font-medium uppercase tracking-wide text-slate-500 flex items-center">
+          Preset Mappings
+          <span class="pro-feature-badge ml-2">Pro</span>
+        </h3>
+
+        <div v-if="!isPro" class="bg-slate-50 text-center p-4 rounded-md text-sm text-slate-600 border border-slate-200">
+            <p class="font-medium">💾 Save and reuse your mappings with Presets!</p>
+            <p class="mt-1 text-xs">A time-saving feature available for Pro users.</p>
+            <button @click="$emit('openUpgradeModal')" class="btn-pro mt-3 text-xs !py-1">✨ Upgrade to Pro</button>
         </div>
 
-        <div v-if="isPro && templates.length === 0 && !isLoadingTemplates" class="bg-slate-50 text-center p-4 rounded-md text-sm text-slate-600">
-          <p>You don't have any saved presets yet.</p>
-          <p class="mt-1">Configure your mapping below, then save it here for future use!</p>
-        </div>
+        <div v-else>
+          <div v-if="templates.length === 0 && !isLoadingTemplates" class="bg-slate-50 text-center p-4 rounded-md text-sm text-slate-600">
+            <p>You don't have any saved presets yet.</p>
+            <p class="mt-1">Configure your mapping below, then save it here for future use!</p>
+          </div>
 
-        <div v-else class="flex items-center gap-2">
-          <select v-model="selectedTemplateId" :disabled="!isPro || isLoadingTemplates" class="form-select-pro flex-grow cursor-pointer !mt-0">
-            <option :value="null">{{ isPro ? 'Load a preset...' : 'Available for Pro' }}</option>
-            <option v-if="isPro" v-for="template in templates" :key="template.id" :value="template.id">{{ template.template_name }}</option>
-          </select>
-          
-          <template v-if="selectedTemplateId">
-            <button @click="handleUpdateTemplate" :disabled="!isMappingDirty || isLoadingTemplates" class="btn-primary">
-              {{ isMappingDirty ? 'Update' : 'Saved' }}
+          <div v-if="templates.length > 0 || isLoadingTemplates" class="flex items-center gap-2 mb-3">
+                <select v-model="selectedTemplateId" :disabled="isLoadingTemplates" class="form-select flex-grow cursor-pointer !mt-0">
+                    <option :value="null">{{ isLoadingTemplates ? 'Loading presets...' : 'Load a preset...' }}</option>
+                    <option v-for="template in templates" :key="template.id" :value="template.id">
+                        {{ template.template_name }}
+                        <span v-if="selectedTemplateId === template.id && !isMappingDirty">✔</span>
+                    </option>
+                </select>
+                <button v-if="selectedTemplateId" @click="clearSelectedTemplate" class="btn text-xs" title="Clear selection">Clear</button>
+            </div>
+
+          <div v-if="selectedTemplateId" class="flex items-center gap-2">
+            <button @click="handleUpdateTemplate" :disabled="!isMappingDirty || isLoadingTemplates" class="btn-primary flex-grow justify-center">
+              <span v-if="!isMappingDirty">✔ Preset Matched</span>
+              <span v-else>Update "{{ selectedTemplateName }}"</span>
             </button>
             <button @click="handleDeleteTemplate" :disabled="isLoadingTemplates" class="btn bg-red-50 text-red-700 border-red-200 hover:bg-red-100 px-2 btnDeleteSetting" title="Delete preset">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6">
-                <path fill-rule="evenodd" d="M9 2a2 2 0 0 0-2 2v2H3v2h1.1l1.2 13.4A2 2 0 0 0 7.3 24h9.4a2 2 0 0 0 2-2.6L19.9 8H21V6h-4V4a2 2 0 0 0-2-2H9Zm2 5v12a1 1 0 1 1-2 0V7h2Zm4 0v12a1 1 0 1 1-2 0V7h2Z" clip-rule="evenodd"></path>
-              </svg>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5"><path fill-rule="evenodd" d="M16.5 4.478v.227a48.816 48.816 0 013.878.512.75.75 0 11-.256 1.478l-.209-.035-1.005 13.07a3 3 0 01-2.991 2.77H8.084a3 3 0 01-2.991-2.77L4.087 6.66l-.209.035a.75.75 0 01-.256-1.478A48.567 48.567 0 017.5 4.705v-.227c0-1.564 1.213-2.9 2.816-2.951a52.662 52.662 0 013.369 0c1.603.051 2.816 1.387 2.816 2.951zm-6.136-1.452a51.196 51.196 0 013.273 0C14.39 3.05 15 3.684 15 4.478v.113a49.488 49.488 0 00-6 0v-.113c0-.794.609-1.428 1.364-1.452zm-.389 6.073a.75.75 0 01.389.676v8.178a.75.75 0 01-1.5 0v-8.178a.75.75 0 011.111-.676zm4.5 0a.75.75 0 01.676-.389h.001a.75.75 0 01.389.676v8.178a.75.75 0 01-1.5 0v-8.178a.75.75 0 01.75-.75z" clip-rule="evenodd" /></svg>
             </button>
-          </template>
-        </div>
+          </div>
 
-        <div class="border-t border-slate-200 my-2"></div>
-        <div class="grid grid-cols-3 gap-2">
-          <input type="text" placeholder="Save current mapping as new preset..." v-model="newTemplateName" :disabled="!isPro || isLoadingTemplates" class="form-input col-span-2 !mt-0" />
-          <button @click="handleSaveNewTemplate" :disabled="!newTemplateName || isLoadingTemplates" class="btn-primary w-full">Save New</button>
+          <div v-if="!selectedTemplateId || templates.length === 0" class="grid grid-cols-3 gap-2 border-t border-slate-200 pt-3 mt-3">
+                <input type="text" placeholder="Save current mapping as new preset..." v-model="newTemplateName" :disabled="isLoadingTemplates" class="form-input col-span-2 !mt-0" />
+                <button @click="handleSaveNewTemplate" :disabled="!newTemplateName || isLoadingTemplates" class="btn-primary w-full">Save New</button>
+            </div>
         </div>
       </div>
-
       <h3 class="text-[12px] font-medium uppercase tracking-wide text-slate-500 mb-2">Manual Configuration</h3>
 
       <div class="space-y-3">
@@ -194,7 +213,7 @@ const handleDeleteTemplate = async () => {
             </select>
           </label>
         </div>
-        
+
         <div>
           <h4 class="text-[12px] font-medium uppercase tracking-wide text-slate-500 mb-1 mt-3">Column Details</h4>
           <div class="overflow-hidden rounded-md border border-slate-200">
