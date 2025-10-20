@@ -42,15 +42,25 @@ const {
   areAllInvoicesSelected,
 } = useInvoiceGenerator()
 
-// *** CẬP NHẬT INVOICE PREVIEW KHI DANH SÁCH INVOICES THAY ĐỔI ***
+
 watch(invoices, (newInvoices) => {
   if (newInvoices.length > 0) {
-    // Nếu invoice đang preview không còn trong danh sách mới, hoặc chưa có gì, chọn cái đầu tiên
-    if (!invoiceForPreview.value || !newInvoices.some(inv => inv._index === invoiceForPreview.value?._index)) {
+    const currentPreviewIndex = invoiceForPreview.value?._index;
+    // Tìm invoice tương ứng trong danh sách mới dựa trên _index
+    const correspondingNewInvoice = newInvoices.find(inv => inv._index === currentPreviewIndex);
+
+    if (correspondingNewInvoice) {
+      // Nếu invoice đang xem trước vẫn tồn tại trong danh sách mới,
+      // cập nhật ref để trỏ tới object MỚI từ mảng đã tính toán lại.
+      invoiceForPreview.value = correspondingNewInvoice;
+    } else {
+      // Nếu không tìm thấy (ví dụ: danh sách bị lọc khác đi),
+      // thì mặc định hiển thị invoice đầu tiên trong danh sách mới.
       invoiceForPreview.value = newInvoices[0];
     }
   } else {
-    invoiceForPreview.value = null; // Reset nếu không còn invoice nào
+    // Nếu không có invoice nào, xóa preview.
+    invoiceForPreview.value = null;
   }
 }, { immediate: true });
 

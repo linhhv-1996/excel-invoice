@@ -53,3 +53,15 @@ html, body { height: 100%; }
     width: 15px;
     color: red;
 }
+
+/* Điều chỉnh padding cho input file để cân bằng chiều cao */
+input[type="file"].form-input {
+  @apply p-0 leading-normal; /* Reset padding và điều chỉnh line-height */
+}
+
+/* Style cho phần nút "Choose file" bên trong input */
+input[type="file"].form-input::file-selector-button {
+  @apply mr-2 rounded-l-md border-0 border-r border-slate-300 bg-slate-100 px-2 py-1.5 text-[12px] font-medium text-slate-700 hover:bg-slate-200 cursor-pointer h-full;
+   /* Đảm bảo chiều cao nút và padding giống input thường */
+}
+

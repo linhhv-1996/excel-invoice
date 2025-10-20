@@ -173,8 +173,9 @@ const clearSelectedPreset = () => {
     <div class="rounded-xl border border-slate-200">
         <div class="flex select-none items-center justify-between px-3 py-2"><h2 class="text-[13px] font-semibold text-ink">3. Output & Style Settings</h2></div>
         <div class="p-3 pt-0">
+
             <div class="mb-4 rounded-md border border-slate-200 p-3 space-y-3">
-                <h3 class="text-[12px] font-medium uppercase tracking-wide text-slate-500 flex items-center">
+                 <h3 class="text-[12px] font-medium uppercase tracking-wide text-slate-500 flex items-center">
                     Invoice Presets <span class="pro-feature-badge ml-2">Pro</span>
                 </h3>
 
@@ -216,28 +217,51 @@ const clearSelectedPreset = () => {
                     </div>
                 </div>
             </div>
+
              <div class="grid grid-cols-2 gap-x-4 gap-y-3">
                 <div class="col-span-2 space-y-2">
                     <h3 class="text-[12px] font-medium uppercase tracking-wide text-slate-500">Sender Information (Your Info)</h3>
+
                     <div class="grid grid-cols-2 gap-2">
                         <label class="col-span-2 md:col-span-1"><div class="text-[12px] text-slate-500">Company Name</div>
                            <input v-model="localSettings.cName" class="form-input" />
                         </label>
                         <label class="col-span-2 md:col-span-1"><div class="text-[12px] text-slate-500">Contact Email</div>
-                           <input v-model="localSettings.cEmail" class="form-input"/>
+                           <input v-model="localSettings.cEmail" type="email" class="form-input"/>
                         </label>
                     </div>
+
+                     <label class="col-span-2">
+                        <div class="mt-1 text-[12px] text-slate-500">Sender Address</div>
+                        <input v-model="localSettings.cAddr" class="form-input" placeholder="123 Your Street, City, Country"/>
+                     </label>
+
                      <div class="grid grid-cols-2 gap-2">
                           <label class="col-span-2 md:col-span-1">
-                              <div class="text-[12px] text-slate-500">Sender Address</div>
-                              <textarea v-model="localSettings.cAddr" class="form-input" rows="2"></textarea>
-                          </label>
-                           <label class="col-span-2 md:col-span-1">
                               <div class="text-[12px] text-slate-500">Tax ID / VAT Number (Optional)</div>
                               <input v-model="localSettings.cTax" class="form-input" placeholder="e.g., VAT DE123456789"/>
                           </label>
+
+                          <div class="col-span-2 md:col-span-1">
+                                <div class="text-[12px] text-slate-500">Your Logo</div>
+                                <div class="flex items-center gap-2">
+                                    <input
+                                        type="file"
+                                        accept="image/png, image/jpeg, image/svg+xml"
+                                        @change="handleLogoChange"
+                                        ref="logoInputRef"
+                                        class="form-input file:mr-2 file:rounded file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-[12px] file:font-medium file:text-slate-700 hover:file:bg-slate-200 flex-grow p-0 cursor-pointer"
+                                    />
+                                    <img v-if="localSettings.logo" :src="localSettings.logo" alt="Logo Preview" class="h-8 w-auto border border-slate-200 rounded object-contain"/>
+                                    <button v-if="localSettings.logo" @click="removeLogo" class="btn text-xs !px-1.5 flex-shrink-0" title="Remove logo">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M5.22 5.22a.75.75 0 0 1 1.06 0L8 6.94l1.72-1.72a.75.75 0 1 1 1.06 1.06L9.06 8l1.72 1.72a.75.75 0 1 1-1.06 1.06L8 9.06l-1.72 1.72a.75.75 0 0 1-1.06-1.06L6.94 8 5.22 6.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" /></svg>
+                                    </button>
+                                </div>
+                                <p class="mt-1 text-[11px] text-slate-500">Max 1MB.</p>
+                          </div>
                      </div>
                 </div>
+
                  <div class="col-span-2 space-y-2 pt-3 mt-3 border-t border-slate-200">
                     <h3 class="text-[12px] font-medium uppercase tracking-wide text-slate-500">Template</h3>
                     <div class="grid grid-cols-2 lg:grid-cols-4 gap-2">
@@ -255,6 +279,7 @@ const clearSelectedPreset = () => {
                         </button>
                     </div>
                 </div>
+
                 <div class="col-span-2 space-y-2 pt-3 mt-3 border-t border-slate-200">
                     <h3 class="text-[12px] font-medium uppercase tracking-wide text-slate-500">Document Settings</h3>
                     <div class="grid grid-cols-2 gap-2">

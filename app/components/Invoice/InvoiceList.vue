@@ -62,7 +62,8 @@ const onRowClick = (invoice: Invoice) => {
                 Showing {{ invoices.length }} {{ isGroupingEnabled ? 'grouped' : '' }} invoices.
                 <span v-if="invoices.length > 0"> ({{ selectedIndices.size }} selected)</span>
             </p>
-            <div class="overflow-hidden rounded-xl border border-slate-200">
+            <div class="max-h-[250px] overflow-y-auto rounded-xl border border-slate-200">
+
                 <table class="w-full text-[13px]">
                     <thead class="bg-slate-50 text-slate-600">
                         <tr>
@@ -114,6 +115,7 @@ const onRowClick = (invoice: Invoice) => {
                          </tr>
                     </tbody>
                 </table>
+
             </div>
         </div>
     </div>
