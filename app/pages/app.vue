@@ -95,7 +95,8 @@ function handleFileTrigger() {
 }
 
 async function handleExportClick() {
-    const invoicesToExportCount = selectedInvoiceCount.value;
+    // const invoicesToExportCount = selectedInvoiceCount.value;
+    const invoicesToExportCount = validSelectedInvoiceCount.value;
 
     if (invoicesToExportCount === 0) {
         showNotification('Please select at least one invoice to export.');
@@ -160,6 +161,19 @@ const handleToggleSelectAll = (isSelected: boolean) => {
 const handleInvoiceRowClick = (invoice: Invoice) => {
     invoiceForPreview.value = invoice;
 }
+
+const validSelectedInvoiceCount = computed(() => {
+  let count = 0;
+  selectedInvoiceIndices.value.forEach(index => {
+    const invoice = invoices.value.find(inv => inv._index === index);
+    if (invoice && (!invoice.errors || invoice.errors.length === 0)) {
+      count++;
+    }
+  });
+  return count;
+});
+
+
 </script>
 
 <template>
@@ -170,7 +184,7 @@ const handleInvoiceRowClick = (invoice: Invoice) => {
   <div v-else-if="rawRows.length > 0" class="min-h-screen bg-white text-slate-900 flex flex-col">
     <AppHeader
       :is-preview-ready="invoices.length > 0"
-      :export-count="selectedInvoiceCount"
+      :export-count="validSelectedInvoiceCount"
       :is-export-disabled="isProcessing"
       :is-exporting="isProcessing"
       :export-progress="progress"

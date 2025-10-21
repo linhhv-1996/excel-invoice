@@ -22,7 +22,8 @@ export interface Invoice {
   invoiceNo: string
   lines: InvoiceLine[]
   // Thêm index để định danh duy nhất cho việc chọn
-  _index?: number
+  _index?: number,
+  errors?: string[]
 }
 
 export interface Mapping {
@@ -134,61 +135,121 @@ export function useInvoiceGenerator() {
      && (!state.mapping.isGroupingEnabled || (state.mapping.isGroupingEnabled && state.mapping.groupBy && state.mapping.groupBy !== '-- No Grouping --'));
   }
 
-  const groupInvoices = (rows: any[], mapping: Mapping): Invoice[] => {
+ const groupInvoices = (rows: any[], mapping: Mapping): Invoice[] => {
     let generatedInvoices: Invoice[] = [];
+
+    // --- Các trường bắt buộc cơ bản ---
+    const requiredFields: (keyof Mapping)[] = ['customer', 'desc', 'qty', 'unit'];
+
     if (!mapping.isGroupingEnabled) {
-      generatedInvoices = rows.map((r, index) => {
-        const customer = String(r[mapping.customer] ?? '').trim();
-        if (!customer && !r[mapping.desc]) return null; // Bỏ qua dòng trống cả customer và desc
+        generatedInvoices = rows.map((r, index) => {
+            const invoice: Partial<Invoice> = {}; // Sử dụng Partial để xây dựng từ từ
+            const errors: string[] = [];
 
-        const qty = Number(r[mapping.qty]) || 0;
-        const unit = Number(r[mapping.unit]) || 0;
+            // Kiểm tra các trường cơ bản
+            requiredFields.forEach(field => {
+                const mappedField = mapping[field];
+                if (!mappedField || !r[mappedField] || String(r[mappedField]).trim() === '') {
+                    errors.push(field.charAt(0).toUpperCase() + field.slice(1)); // Ví dụ: 'Customer', 'Desc'
+                }
+            });
 
-        return {
-          customer: customer || 'N/A', // Gán giá trị mặc định nếu customer trống
-          email: r[mapping.email] || '',
-          groupBy: '',
-          invoiceNo: r[mapping.invoiceNo] || `INV-${index + 1}`,
-          lines: [{
-            desc: String(r[mapping.desc] || 'N/A').trim(), // Gán giá trị mặc định
-            qty,
-            unit,
-            total: qty * unit
-          }]
-        };
-      }).filter(Boolean) as Invoice[];
+            // Lấy dữ liệu (vẫn lấy dù có lỗi để hiển thị phần còn lại)
+            const customer = String(r[mapping.customer] ?? '').trim();
+            const qty = Number(r[mapping.qty]) || 0;
+            const unit = Number(r[mapping.unit]) || 0;
+            const desc = String(r[mapping.desc] || '').trim();
+
+            // Bỏ qua dòng hoàn toàn trống (có thể điều chỉnh logic này)
+            if (!customer && !desc && qty === 0 && unit === 0) return null;
+
+            return {
+                customer: customer || 'N/A',
+                email: r[mapping.email] || '',
+                groupBy: '',
+                invoiceNo: r[mapping.invoiceNo] || `INV-${index + 1}`,
+                lines: [{
+                    desc: desc || 'N/A',
+                    qty,
+                    unit,
+                    total: qty * unit
+                }],
+                errors: errors.length > 0 ? errors : undefined // Gán mảng lỗi nếu có
+            };
+        }).filter(Boolean) as Invoice[];
+
     } else {
-      const groupColumn = mapping.groupBy;
-      if (!groupColumn || groupColumn === '-- No Grouping --') return [];
-
-      const groups = new Map<string, Invoice>();
-      for (const r of rows) {
-        const key = String(r[groupColumn] ?? '').trim();
-        if (!key && !r[mapping.desc]) continue; // Bỏ qua nếu key và desc đều trống
-
-        const groupKey = key || `__empty_group_${String(r[mapping.customer] ?? '').trim()}`; // Tạo key tạm nếu group trống
-
-        if (!groups.has(groupKey)) {
-          groups.set(groupKey, {
-            customer: String(r[mapping.customer] ?? 'N/A').trim(),
-            email: r[mapping.email] || '',
-            groupBy: key, // Vẫn giữ groupBy gốc (có thể trống)
-            invoiceNo: '', // Sẽ đánh số sau
-            lines: []
-          });
+        const groupColumn = mapping.groupBy;
+        // --- Kiểm tra thêm groupBy nếu bật grouping ---
+        if (!groupColumn || groupColumn === '-- No Grouping --') {
+             // Có thể thêm lỗi chung ở đây nếu muốn, hoặc báo lỗi ở MappingCard
+             // Ví dụ: showNotification('Please select a valid "Group by" column.');
+             return []; // Không tạo invoice nào nếu groupBy không hợp lệ
         }
 
-        const g = groups.get(groupKey)!;
-        const qty = Number(r[mapping.qty]) || 0;
-        const unit = Number(r[mapping.unit]) || 0;
-        g.lines.push({ desc: String(r[mapping.desc] || 'N/A').trim(), qty, unit, total: qty * unit });
-      }
-      generatedInvoices = Array.from(groups.values());
+        const groups = new Map<string, Invoice>();
+
+        for (const r of rows) {
+            const key = String(r[groupColumn] ?? '').trim();
+            const customer = String(r[mapping.customer] ?? '').trim();
+            const desc = String(r[mapping.desc] || '').trim();
+            const qty = Number(r[mapping.qty]) || 0;
+            const unit = Number(r[mapping.unit]) || 0;
+
+             // Bỏ qua dòng gần như trống
+             if (!key && !customer && !desc && qty === 0 && unit === 0) continue;
+
+            const groupKey = key || `__empty_group_${customer}`;
+
+            if (!groups.has(groupKey)) {
+                 // Kiểm tra customer chỉ khi tạo group mới
+                 const initialErrors: string[] = [];
+                 if (!customer) {
+                     initialErrors.push('Customer');
+                 }
+                  // Kiểm tra groupBy key bị trống khi tạo group
+                 if (!key) {
+                    initialErrors.push('Group By Field'); // Thêm lỗi nếu group key trống
+                 }
+
+                groups.set(groupKey, {
+                    customer: customer || 'N/A',
+                    email: r[mapping.email] || '',
+                    groupBy: key,
+                    invoiceNo: '', // Sẽ đánh số sau
+                    lines: [],
+                    errors: initialErrors.length > 0 ? initialErrors : undefined // Gán lỗi ban đầu nếu có
+                });
+            }
+
+            const g = groups.get(groupKey)!;
+            const lineErrors: string[] = [];
+
+            // Kiểm tra các trường bắt buộc cho từng dòng line
+             if (!desc) lineErrors.push('Item Name (desc)');
+             if (isNaN(qty) || qty === 0) lineErrors.push('Quantity (qty)'); // Coi qty=0 là lỗi nếu cần
+             if (isNaN(unit)) lineErrors.push('Unit price (unit)'); // Chỉ check NaN, giá 0 có thể hợp lệ
+
+             // Thêm lỗi của dòng vào lỗi chung của group (nếu chưa có)
+             if (lineErrors.length > 0) {
+                 g.errors = g.errors || [];
+                 lineErrors.forEach(err => {
+                     if (!g.errors!.includes(err)) {
+                         g.errors!.push(err);
+                     }
+                 });
+             }
+
+
+            g.lines.push({ desc: desc || 'N/A', qty, unit, total: qty * unit });
+        }
+        generatedInvoices = Array.from(groups.values());
     }
 
     // Gán _index cho mỗi invoice
     return generatedInvoices.map((inv, index) => ({ ...inv, _index: index }));
-  }
+}
+
 
 
   const generateAndPreview = () => {
@@ -260,22 +321,41 @@ export function useInvoiceGenerator() {
     return String(s || '').replace(/[^a-z0-9_\-.]+/gi, '_').slice(0, 80) || 'invoice'
   }
 
-  const exportZip = async () => {
-    // --- **CẬP NHẬT KIỂM TRA** ---
-    const invoicesToExport = invoices.value.filter(inv => selectedInvoiceIndices.value.has(inv._index!));
+const exportZip = async () => {
+    // --- Lấy ra các invoice ĐƯỢC CHỌN ---
+    const selectedInvoices = invoices.value.filter(inv => selectedInvoiceIndices.value.has(inv._index!));
+
+    // --- Lọc bỏ những invoice bị lỗi khỏi danh sách được chọn ---
+    const invoicesToExport = selectedInvoices.filter(inv => !inv.errors || inv.errors.length === 0);
+    const erroredInvoicesSkipped = selectedInvoices.length - invoicesToExport.length; // Số lượng hóa đơn lỗi bị bỏ qua
 
     if (!validateMapping() || invoicesToExport.length === 0) {
-      return showNotification('Please check mappings and select at least one invoice to export.');
+      if (erroredInvoicesSkipped > 0 && selectedInvoices.length > 0) {
+         // Trường hợp chỉ chọn phải hóa đơn lỗi
+         showNotification(`Cannot export: All ${erroredInvoicesSkipped} selected invoice(s) have missing required information. Please fix them or select valid invoices.`);
+      } else if (!validateMapping()) {
+          showNotification('Please check mappings before exporting.');
+      }
+      else {
+          showNotification('Please select at least one valid invoice to export.');
+      }
+      return;
     }
 
+    // Thông báo nếu có hóa đơn lỗi bị bỏ qua
+    if (erroredInvoicesSkipped > 0) {
+        showNotification(`Skipped ${erroredInvoicesSkipped} invoice(s) with missing information.`);
+    }
+
+
     isProcessing.value = true
-    const limit = invoicesToExport.length; // Số lượng cần export
+    const limit = invoicesToExport.length; // Số lượng cần export (chỉ những cái hợp lệ)
     progress.value = { value: 0, text: `Generating ${limit} PDFs…` }
 
     try {
       const zip = new JSZip()
       for (let i = 0; i < limit; i++) {
-        const inv = invoicesToExport[i] // Chỉ lấy invoice đã chọn
+        const inv = invoicesToExport[i] // Chỉ lấy invoice hợp lệ đã chọn
         const pdfBytes = await renderPdf(inv, state.settings, { watermark: state.settings.freeMode })
         // Tạo tên file (có thể cần cập nhật logic này dựa trên settings.fileNamePattern)
         const fname = `${sanitizeFile(inv.invoiceNo || `INV-${inv._index! + 1}`)}.pdf`
@@ -297,6 +377,7 @@ export function useInvoiceGenerator() {
       }, 2000)
     }
   }
+  
 
   // --- Lifecycle & Watchers ---
   onMounted(() => {
